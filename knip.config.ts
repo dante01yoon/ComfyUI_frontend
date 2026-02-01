@@ -64,8 +64,7 @@ const config: KnipConfig = {
   },
   tags: [
     '-knipIgnoreUnusedButUsedByCustomNodes',
-    '-knipIgnoreUnusedButUsedByVueNodesBranch',
-    '-knipIgnoreUsedByStackedPR'
+    '-knipIgnoreUnusedButUsedByVueNodesBranch'
   ]
 }
 
