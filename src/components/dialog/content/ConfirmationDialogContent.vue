@@ -15,7 +15,7 @@
     >
       {{ hint }}
     </Message>
-    <div class="flex justify-end gap-4">
+    <div class="flex flex-wrap justify-end gap-4">
       <div
         v-if="type === 'overwriteBlueprint'"
         class="flex justify-start gap-4"
@@ -132,5 +132,6 @@ const onConfirm = () => {
 <style lang="css" scoped>
 .prompt-dialog-content {
   white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 </style>
