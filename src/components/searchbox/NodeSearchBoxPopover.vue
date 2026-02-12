@@ -90,6 +90,7 @@ function addNode(nodeDef: ComfyNodeDefImpl) {
   const node = litegraphService.addNodeOnGraph(nodeDef, {
     pos: getNewNodeLocation()
   })
+  if (!node) return
 
   if (disconnectOnReset && triggerEvent) {
     canvasStore.getCanvas().linkConnector.connectToNode(node, triggerEvent)
