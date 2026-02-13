@@ -1,11 +1,8 @@
 import _ from 'es-toolkit/compat'
 
-import type {
-  ColorOption,
-  LGraph,
-  LGraphCanvas
-} from '@/lib/litegraph/src/litegraph'
+import type { ColorOption, LGraph } from '@/lib/litegraph/src/litegraph'
 import {
+  LGraphCanvas,
   LGraphGroup,
   LGraphNode,
   LiteGraph,
@@ -274,6 +271,10 @@ function compressSubgraphWidgetInputSlots(
 
     compressSubgraphWidgetInputSlots(subgraph.definitions?.subgraphs, visited)
   }
+}
+
+export function getLinkTypeColor(typeName: string): string {
+  return LGraphCanvas.link_type_colors[typeName] ?? LiteGraph.LINK_COLOR
 }
 
 export function isLoad3dNode(node: LGraphNode) {
