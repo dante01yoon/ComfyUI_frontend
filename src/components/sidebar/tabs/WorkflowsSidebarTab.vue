@@ -57,7 +57,9 @@
                   >
                 </template>
                 <template #after-label="{ node: treeNode }">
-                  <WorkflowExecutionBadge :workflow="treeNode.data as ComfyWorkflow" />
+                  <WorkflowExecutionBadge
+                    :workflow="treeNode.data as ComfyWorkflow"
+                  />
                 </template>
                 <template #actions="{ node: treeNode }">
                   <Button
