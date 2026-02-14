@@ -78,7 +78,7 @@ function getDialogPt(item: {
 <style>
 @reference '../../assets/css/style.css';
 
-.global-dialog .p-dialog {
+.global-dialog {
   max-width: calc(100vw - 1rem);
 }
 
