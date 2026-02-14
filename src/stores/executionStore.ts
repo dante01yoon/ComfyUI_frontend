@@ -50,7 +50,7 @@ interface QueuedPrompt {
 export type WorkflowExecutionResult = {
   state: 'completed' | 'error'
   timestamp: number
-  promptId: string
+  promptId?: string
 }
 
 export type WorkflowExecutionState = 'idle' | 'running' | 'completed' | 'error'
@@ -171,7 +171,7 @@ export const useExecutionStore = defineStore('execution', () => {
     next.set(workflowId, {
       state,
       timestamp: Date.now(),
-      promptId: promptId ?? ''
+      promptId
     })
     lastExecutionResultByWorkflowId.value = next
   }

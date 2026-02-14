@@ -14,8 +14,9 @@ const _clearWorkflowExecutionResult = vi.fn()
 
 vi.mock('@/stores/executionStore', () => ({
   useExecutionStore: () => ({
-    get workflowExecutionStates() {
-      return _workflowExecutionStates.value
+    getWorkflowExecutionState: (wid: string | undefined) => {
+      if (!wid) return 'idle'
+      return _workflowExecutionStates.value.get(wid) ?? 'idle'
     },
     clearWorkflowExecutionResult: _clearWorkflowExecutionResult
   })
