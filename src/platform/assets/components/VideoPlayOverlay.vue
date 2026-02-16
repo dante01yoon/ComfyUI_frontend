@@ -1,26 +1,24 @@
 <template>
-  <div
-    v-if="visible"
-    :class="cn('pointer-events-none absolute inset-0', overlayClass)"
-  />
-  <div
-    v-if="visible"
-    class="pointer-events-none absolute inset-0 flex items-center justify-center"
-  >
+  <template v-if="visible">
+    <div :class="cn('pointer-events-none absolute inset-0', overlayClass)" />
     <div
-      :class="
-        cn(
-          'flex items-center justify-center rounded-full bg-black/60',
-          buttonSizeClass
-        )
-      "
+      class="pointer-events-none absolute inset-0 flex items-center justify-center"
     >
-      <i
-        aria-hidden="true"
-        :class="cn('icon-[lucide--play] text-white', iconSizeClass)"
-      />
+      <div
+        :class="
+          cn(
+            'flex items-center justify-center rounded-full bg-black/60',
+            buttonSizeClass
+          )
+        "
+      >
+        <i
+          aria-hidden="true"
+          :class="cn('icon-[lucide--play] text-white', iconSizeClass)"
+        />
+      </div>
     </div>
-  </div>
+  </template>
 </template>
 
 <script setup lang="ts">
