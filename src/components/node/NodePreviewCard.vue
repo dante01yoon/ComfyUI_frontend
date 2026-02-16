@@ -41,10 +41,16 @@
       </p>
 
       <!-- Divider -->
-      <div v-if="(inputs.length > 0 || outputs.length > 0) && showInputsAndOutputs" class="border-t border-border-default" />
+      <div
+        v-if="(inputs.length > 0 || outputs.length > 0) && showInputsAndOutputs"
+        class="border-t border-border-default"
+      />
 
       <!-- Inputs Section -->
-      <div v-if="inputs.length > 0 && showInputsAndOutputs" class="flex flex-col gap-1">
+      <div
+        v-if="inputs.length > 0 && showInputsAndOutputs"
+        class="flex flex-col gap-1"
+      >
         <h4
           class="text-xxs font-semibold uppercase tracking-wide text-muted-foreground m-0"
         >
@@ -63,7 +69,10 @@
       </div>
 
       <!-- Outputs Section -->
-      <div v-if="outputs.length > 0 && showInputsAndOutputs" class="flex flex-col gap-1">
+      <div
+        v-if="outputs.length > 0 && showInputsAndOutputs"
+        class="flex flex-col gap-1"
+      >
         <h4
           class="text-xxs font-semibold uppercase tracking-wide text-muted-foreground m-0"
         >
