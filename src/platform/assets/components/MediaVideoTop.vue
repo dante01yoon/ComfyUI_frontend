@@ -5,6 +5,7 @@
     @mouseleave="isHovered = false"
   >
     <video
+      ref="videoElement"
       :controls="shouldShowControls"
       preload="metadata"
       muted
@@ -12,7 +13,7 @@
       playsinline
       :poster="asset.preview_url || asset.src || ''"
       class="relative size-full object-contain transition-transform duration-300 group-hover:scale-105 group-data-[selected=true]:scale-105"
-      @click.stop
+      @click.stop="onVideoClick"
       @play="onVideoPlay"
       @pause="onVideoPause"
       @ended="onVideoEnded"
@@ -39,11 +40,12 @@ const emit = defineEmits<{
   videoControlsChanged: [showControls: boolean]
 }>()
 
+const videoElement = ref<HTMLVideoElement | null>(null)
 const isHovered = ref(false)
 const isPlaying = ref(false)
 
-// Always show controls when not playing, hide/show based on hover when playing
-const shouldShowControls = computed(() => !isPlaying.value || isHovered.value)
+// Show native controls only while actively playing and hovered.
+const shouldShowControls = computed(() => isPlaying.value && isHovered.value)
 
 watch(shouldShowControls, (controlsVisible) => {
   emit('videoControlsChanged', controlsVisible)
@@ -66,5 +68,19 @@ const onVideoPause = () => {
 const onVideoEnded = () => {
   isPlaying.value = false
   emit('videoPlayingStateChanged', false)
+}
+
+const onVideoClick = async () => {
+  if (shouldShowControls.value) return
+
+  const video = videoElement.value
+  if (!video) return
+
+  if (video.paused || video.ended) {
+    await video.play().catch(() => {})
+    return
+  }
+
+  video.pause()
 }
 </script>

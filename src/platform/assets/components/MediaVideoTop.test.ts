@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { AssetMeta } from '../schemas/mediaAssetSchema'
 import MediaVideoTop from './MediaVideoTop.vue'
@@ -22,7 +22,10 @@ describe('MediaVideoTop', () => {
       }
     })
 
-    expect(wrapper.find('video').exists()).toBe(true)
+    const video = wrapper.find('video')
+    const videoElement = video.element as HTMLVideoElement
+    expect(video.exists()).toBe(true)
+    expect(videoElement.controls).toBe(false)
     expect(wrapper.find('source').attributes('src')).toBe(
       'https://example.com/thumb.jpg'
     )
@@ -38,14 +41,45 @@ describe('MediaVideoTop', () => {
     })
 
     const video = wrapper.find('video')
+    const videoElement = video.element as HTMLVideoElement
     expect(video.exists()).toBe(true)
 
     await video.trigger('play')
     expect(wrapper.emitted('videoPlayingStateChanged')?.at(-1)).toEqual([true])
     expect(wrapper.find('.bg-black\\/10').exists()).toBe(false)
 
+    await wrapper.trigger('mouseenter')
+    expect(videoElement.controls).toBe(true)
+
+    await wrapper.trigger('mouseleave')
+    expect(videoElement.controls).toBe(false)
+
     await video.trigger('pause')
     expect(wrapper.emitted('videoPlayingStateChanged')?.at(-1)).toEqual([false])
     expect(wrapper.find('.bg-black\\/10').exists()).toBe(true)
+    expect(videoElement.controls).toBe(false)
+  })
+
+  it('starts playback from click when controls are hidden', async () => {
+    const wrapper = mount(MediaVideoTop, {
+      props: {
+        asset: createVideoAsset('https://example.com/thumb.jpg')
+      }
+    })
+
+    const video = wrapper.find('video')
+    const videoElement = video.element as HTMLVideoElement
+    const playSpy = vi
+      .spyOn(videoElement, 'play')
+      .mockImplementation(() => Promise.resolve())
+
+    Object.defineProperty(videoElement, 'paused', {
+      value: true,
+      configurable: true
+    })
+
+    await video.trigger('click')
+
+    expect(playSpy).toHaveBeenCalledTimes(1)
   })
 })
