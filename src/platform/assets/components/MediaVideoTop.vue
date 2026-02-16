@@ -10,7 +10,7 @@
       muted
       loop
       playsinline
-      :poster="asset.preview_url"
+      :poster="asset.preview_url || asset.src || ''"
       class="relative size-full object-contain transition-transform duration-300 group-hover:scale-105 group-data-[selected=true]:scale-105"
       @click.stop
       @play="onVideoPlay"
@@ -19,6 +19,7 @@
     >
       <source :src="asset.src || ''" />
     </video>
+    <VideoPlayOverlay :visible="!isPlaying" size="md" />
   </div>
 </template>
 
@@ -26,6 +27,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 
 import type { AssetMeta } from '../schemas/mediaAssetSchema'
+
+import VideoPlayOverlay from './VideoPlayOverlay.vue'
 
 const { asset } = defineProps<{
   asset: AssetMeta
