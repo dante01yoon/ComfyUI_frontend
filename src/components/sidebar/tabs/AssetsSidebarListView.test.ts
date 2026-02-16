@@ -67,7 +67,11 @@ vi.mock('@/utils/formatUtil', () => ({
   formatDuration: (d: number) => `${d}s`,
   formatSize: (s: number) => `${s}B`,
   getMediaTypeFromFilename: (filename: string) =>
-    filename.endsWith('.mp4') ? 'video' : 'image',
+    filename.endsWith('.mp4')
+      ? 'video'
+      : filename.endsWith('.txt')
+        ? 'text'
+        : 'other',
   truncateFilename: (name: string) => name
 }))
 
@@ -182,5 +186,40 @@ describe('AssetsSidebarListView', () => {
     expect(assetListItem).toBeDefined()
     expect(assetListItem?.props('previewUrl')).toBe('/api/view/clip.mp4')
     expect(assetListItem?.props('isVideoPreview')).toBe(true)
+  })
+
+  it('uses icon fallback for text/misc assets even when preview_url exists', () => {
+    const textAsset = {
+      id: 'text-asset',
+      name: 'notes.txt',
+      tags: [],
+      preview_url: '/api/view/notes.txt',
+      user_metadata: {}
+    }
+
+    const wrapper = mount(AssetsSidebarListView, {
+      props: {
+        ...defaultProps,
+        assetItems: [{ key: 'asset-1', asset: textAsset }],
+        selectableAssets: [textAsset]
+      },
+      shallow: true,
+      global: {
+        stubs: {
+          VirtualGrid: {
+            props: ['items'],
+            template:
+              '<div><slot v-for="item in items" :key="item.key" name="item" :item="item" /></div>'
+          }
+        }
+      }
+    })
+
+    const listItems = wrapper.findAllComponents({ name: 'AssetsListItem' })
+    const assetListItem = listItems.at(-1)
+
+    expect(assetListItem).toBeDefined()
+    expect(assetListItem?.props('previewUrl')).toBe('')
+    expect(assetListItem?.props('isVideoPreview')).toBe(false)
   })
 })
