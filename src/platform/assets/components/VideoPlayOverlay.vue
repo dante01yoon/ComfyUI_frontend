@@ -31,7 +31,7 @@ import { cn } from '@/utils/tailwindUtil'
 const {
   visible = true,
   size = 'md',
-  overlayClass = 'bg-black/10'
+  overlayClass = 'bg-black/15'
 } = defineProps<{
   visible?: boolean
   size?: 'sm' | 'md'

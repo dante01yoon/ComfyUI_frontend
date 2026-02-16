@@ -4,19 +4,21 @@ import { describe, expect, it } from 'vitest'
 import AssetsListItem from './AssetsListItem.vue'
 
 describe('AssetsListItem', () => {
-  it('shows a darkened play overlay for video previews', () => {
+  it('renders video element with play overlay for video previews', () => {
     const wrapper = mount(AssetsListItem, {
       props: {
-        previewUrl: 'https://example.com/preview.jpg',
+        previewUrl: 'https://example.com/preview.mp4',
         previewAlt: 'clip.mp4',
         isVideoPreview: true
       }
     })
 
-    expect(wrapper.find('img').attributes('src')).toBe(
-      'https://example.com/preview.jpg'
-    )
-    expect(wrapper.find('.bg-black\\/10').exists()).toBe(true)
+    const video = wrapper.find('video')
+    expect(video.exists()).toBe(true)
+    expect(video.attributes('src')).toBe('https://example.com/preview.mp4')
+    expect(video.attributes('preload')).toBe('metadata')
+    expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.find('.bg-black\\/15').exists()).toBe(true)
     expect(wrapper.find('.icon-\\[lucide--play\\]').exists()).toBe(true)
   })
 
@@ -29,6 +31,8 @@ describe('AssetsListItem', () => {
       }
     })
 
+    expect(wrapper.find('img').exists()).toBe(true)
+    expect(wrapper.find('video').exists()).toBe(false)
     expect(wrapper.find('.icon-\\[lucide--play\\]').exists()).toBe(false)
   })
 })

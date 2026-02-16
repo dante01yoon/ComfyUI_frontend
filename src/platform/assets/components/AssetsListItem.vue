@@ -36,12 +36,22 @@
         :icon-aria-label="iconAriaLabel"
       >
         <div v-if="previewUrl" class="relative size-full">
+          <template v-if="isVideoPreview">
+            <video
+              :src="previewUrl"
+              preload="metadata"
+              muted
+              playsinline
+              class="pointer-events-none size-full object-cover"
+            />
+            <VideoPlayOverlay size="sm" />
+          </template>
           <img
+            v-else
             :src="previewUrl"
             :alt="previewAlt"
             class="size-full object-cover"
           />
-          <VideoPlayOverlay :visible="isVideoPreview" size="sm" />
         </div>
         <div v-else class="flex size-full items-center justify-center">
           <i

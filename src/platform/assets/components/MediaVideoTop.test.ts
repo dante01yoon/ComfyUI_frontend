@@ -29,7 +29,7 @@ describe('MediaVideoTop', () => {
     expect(wrapper.find('source').attributes('src')).toBe(
       'https://example.com/thumb.jpg'
     )
-    expect(wrapper.find('.bg-black\\/10').exists()).toBe(true)
+    expect(wrapper.find('.bg-black\\/15').exists()).toBe(true)
     expect(wrapper.find('.icon-\\[lucide--play\\]').exists()).toBe(true)
   })
 
@@ -46,7 +46,7 @@ describe('MediaVideoTop', () => {
 
     await video.trigger('play')
     expect(wrapper.emitted('videoPlayingStateChanged')?.at(-1)).toEqual([true])
-    expect(wrapper.find('.bg-black\\/10').exists()).toBe(false)
+    expect(wrapper.find('.bg-black\\/15').exists()).toBe(false)
 
     await wrapper.trigger('mouseenter')
     expect(videoElement.controls).toBe(true)
@@ -56,7 +56,7 @@ describe('MediaVideoTop', () => {
 
     await video.trigger('pause')
     expect(wrapper.emitted('videoPlayingStateChanged')?.at(-1)).toEqual([false])
-    expect(wrapper.find('.bg-black\\/10').exists()).toBe(true)
+    expect(wrapper.find('.bg-black\\/15').exists()).toBe(true)
     expect(videoElement.controls).toBe(false)
   })
 
