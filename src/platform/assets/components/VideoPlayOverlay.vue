@@ -4,19 +4,10 @@
     <div
       class="pointer-events-none absolute inset-0 flex items-center justify-center"
     >
-      <div
-        :class="
-          cn(
-            'flex items-center justify-center rounded-full bg-black/60',
-            buttonSizeClass
-          )
-        "
-      >
-        <i
-          aria-hidden="true"
-          :class="cn('icon-[lucide--play] text-white', iconSizeClass)"
-        />
-      </div>
+      <i
+        aria-hidden="true"
+        :class="cn('icon-[lucide--play] text-white', iconSizeClass)"
+      />
     </div>
   </template>
 </template>
@@ -36,6 +27,5 @@ const {
   overlayClass?: string
 }>()
 
-const buttonSizeClass = computed(() => (size === 'sm' ? 'size-5' : 'size-12'))
 const iconSizeClass = computed(() => (size === 'sm' ? 'size-3' : 'size-6'))
 </script>
