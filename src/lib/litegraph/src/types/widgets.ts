@@ -1,6 +1,12 @@
 import type { Bounds } from '@/renderer/core/layout/types'
 
-import type { CanvasColour, Point, RequiredProps, Size } from '../interfaces'
+import type {
+  CanvasColour,
+  ColorStop,
+  Point,
+  RequiredProps,
+  Size
+} from '../interfaces'
 import type {
   CanvasPointer,
   LGraphCanvas,
@@ -64,6 +70,13 @@ interface IWidgetSliderOptions extends IWidgetOptions<number[]> {
   marker_color?: CanvasColour
 }
 
+export interface IWidgetGradientSliderOptions extends IWidgetOptions<number[]> {
+  min: number
+  max: number
+  step2: number
+  gradient_stops?: ColorStop[]
+}
+
 interface IWidgetKnobOptions extends IWidgetOptions<number[]> {
   min: number
   max: number
@@ -93,6 +106,7 @@ export type IWidget =
   | IStringComboWidget
   | ICustomWidget
   | ISliderWidget
+  | IGradientSliderWidget
   | IButtonWidget
   | IKnobWidget
   | IFileUploadWidget
@@ -107,6 +121,7 @@ export type IWidget =
   | ISelectButtonWidget
   | ITextareaWidget
   | IAssetWidget
+  | IPasswordWidget
   | IImageCropWidget
   | IBoundingBoxWidget
 
@@ -129,6 +144,15 @@ export interface ISliderWidget extends IBaseWidget<
   type: 'slider'
   value: number
   marker?: number
+}
+
+export interface IGradientSliderWidget extends IBaseWidget<
+  number,
+  'gradientslider',
+  IWidgetGradientSliderOptions
+> {
+  type: 'gradientslider'
+  value: number
 }
 
 export interface IKnobWidget extends IBaseWidget<
@@ -173,6 +197,12 @@ export interface IStringWidget extends IBaseWidget<
   IWidgetOptions<string[]>
 > {
   type: 'string' | 'text'
+  value: string
+}
+
+/** A widget with a masked string value for sensitive inputs like API keys */
+export interface IPasswordWidget extends IBaseWidget<string, 'password'> {
+  type: 'password'
   value: string
 }
 
