@@ -17,7 +17,9 @@ vi.mock('@/scripts/app', () => ({
 
 vi.mock('@/utils/graphTraversalUtil', () => ({
   getNodeByExecutionId: vi.fn(),
-  forEachNode: vi.fn()
+  getRootParentNode: vi.fn(() => null),
+  forEachNode: vi.fn(),
+  mapAllNodes: vi.fn(() => [])
 }))
 
 vi.mock('@/composables/useCopyToClipboard', () => ({
@@ -93,7 +95,7 @@ describe('TabErrors.vue', () => {
 
   it('renders prompt-level errors (Group title = error message)', async () => {
     const wrapper = mountComponent({
-      execution: {
+      executionError: {
         lastPromptError: {
           type: 'prompt_no_outputs',
           message: 'Server Error: No outputs',
@@ -117,7 +119,7 @@ describe('TabErrors.vue', () => {
     } as ReturnType<typeof getNodeByExecutionId>)
 
     const wrapper = mountComponent({
-      execution: {
+      executionError: {
         lastNodeErrors: {
           '6': {
             class_type: 'CLIPTextEncode',
@@ -142,7 +144,7 @@ describe('TabErrors.vue', () => {
     } as ReturnType<typeof getNodeByExecutionId>)
 
     const wrapper = mountComponent({
-      execution: {
+      executionError: {
         lastExecutionError: {
           prompt_id: 'abc',
           node_id: '10',
@@ -166,7 +168,7 @@ describe('TabErrors.vue', () => {
     vi.mocked(getNodeByExecutionId).mockReturnValue(null)
 
     const wrapper = mountComponent({
-      execution: {
+      executionError: {
         lastNodeErrors: {
           '1': {
             class_type: 'CLIPTextEncode',
@@ -197,7 +199,7 @@ describe('TabErrors.vue', () => {
     vi.mocked(useCopyToClipboard).mockReturnValue({ copyToClipboard: mockCopy })
 
     const wrapper = mountComponent({
-      execution: {
+      executionError: {
         lastNodeErrors: {
           '1': {
             class_type: 'TestNode',
@@ -207,12 +209,42 @@ describe('TabErrors.vue', () => {
       }
     })
 
-    // Find the copy button (rendered inside ErrorNodeCard)
-    const copyButtons = wrapper.findAll('button')
-    const copyButton = copyButtons.find((btn) => btn.text().includes('Copy'))
-    expect(copyButton).toBeTruthy()
-    await copyButton!.trigger('click')
+    const copyButton = wrapper.find('[data-testid="error-card-copy"]')
+    expect(copyButton.exists()).toBe(true)
+    await copyButton.trigger('click')
 
     expect(mockCopy).toHaveBeenCalledWith('Test message\n\nTest details')
+  })
+
+  it('renders single runtime error outside accordion in full-height panel', async () => {
+    const { getNodeByExecutionId } = await import('@/utils/graphTraversalUtil')
+    vi.mocked(getNodeByExecutionId).mockReturnValue({
+      title: 'KSampler'
+    } as ReturnType<typeof getNodeByExecutionId>)
+
+    const wrapper = mountComponent({
+      executionError: {
+        lastExecutionError: {
+          prompt_id: 'abc',
+          node_id: '10',
+          node_type: 'KSampler',
+          exception_message: 'Out of memory',
+          exception_type: 'RuntimeError',
+          traceback: ['Line 1', 'Line 2'],
+          timestamp: Date.now()
+        }
+      }
+    })
+
+    // Runtime error panel title should show class type
+    expect(wrapper.text()).toContain('KSampler')
+    expect(wrapper.text()).toContain('RuntimeError: Out of memory')
+    // Should render in the dedicated runtime error panel, not inside accordion
+    const runtimePanel = wrapper.find('[data-testid="runtime-error-panel"]')
+    expect(runtimePanel.exists()).toBe(true)
+    // Verify the error message appears exactly once (not duplicated in accordion)
+    expect(
+      wrapper.text().match(/RuntimeError: Out of memory/g) ?? []
+    ).toHaveLength(1)
   })
 })

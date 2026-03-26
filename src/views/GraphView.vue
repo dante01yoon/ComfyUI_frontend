@@ -1,5 +1,5 @@
 <template>
-  <div class="comfyui-body grid h-full w-full overflow-hidden">
+  <div class="comfyui-body grid size-full overflow-hidden">
     <div id="comfyui-body-top" class="comfyui-body-top" />
     <div id="comfyui-body-bottom" class="comfyui-body-bottom" />
     <div id="comfyui-body-left" class="comfyui-body-left" />
@@ -13,6 +13,11 @@
       <GraphCanvas @ready="onGraphReady" />
     </div>
     <LinearView v-if="linearMode" />
+    <template v-if="isBuilderMode">
+      <BuilderToolbar />
+      <BuilderMenu />
+      <BuilderFooterToolbar />
+    </template>
   </div>
 
   <GlobalToast />
@@ -50,6 +55,7 @@ import InviteAcceptedToast from '@/platform/workspace/components/toasts/InviteAc
 import RerouteMigrationToast from '@/components/toast/RerouteMigrationToast.vue'
 import { useBrowserTabTitle } from '@/composables/useBrowserTabTitle'
 import { useCoreCommands } from '@/composables/useCoreCommands'
+import { useQueuePolling } from '@/platform/remote/comfyui/useQueuePolling'
 import { useErrorHandling } from '@/composables/useErrorHandling'
 import { useProgressFavicon } from '@/composables/useProgressFavicon'
 import { SERVER_CONFIG_ITEMS } from '@/constants/serverConfig'
@@ -68,6 +74,7 @@ import { api } from '@/scripts/api'
 import { app } from '@/scripts/app'
 import { setupAutoQueueHandler } from '@/services/autoQueueService'
 import { useKeybindingService } from '@/platform/keybindings/keybindingService'
+import { useAppMode } from '@/composables/useAppMode'
 import { useAssetsStore } from '@/stores/assetsStore'
 import { useCommandStore } from '@/stores/commandStore'
 import { useExecutionStore } from '@/stores/executionStore'
@@ -84,6 +91,9 @@ import { useBottomPanelStore } from '@/stores/workspace/bottomPanelStore'
 import { useColorPaletteStore } from '@/stores/workspace/colorPaletteStore'
 import { useSidebarTabStore } from '@/stores/workspace/sidebarTabStore'
 import { electronAPI } from '@/utils/envUtil'
+import BuilderFooterToolbar from '@/components/builder/BuilderFooterToolbar.vue'
+import BuilderMenu from '@/components/builder/BuilderMenu.vue'
+import BuilderToolbar from '@/components/builder/BuilderToolbar.vue'
 import LinearView from '@/views/LinearView.vue'
 import ManagerProgressToast from '@/workbench/extensions/manager/components/ManagerProgressToast.vue'
 
@@ -100,7 +110,14 @@ const queueStore = useQueueStore()
 const assetsStore = useAssetsStore()
 const versionCompatibilityStore = useVersionCompatibilityStore()
 const graphCanvasContainerRef = ref<HTMLDivElement | null>(null)
+const { isBuilderMode } = useAppMode()
 const { linearMode } = storeToRefs(useCanvasStore())
+
+watch(linearMode, (isLinear) => {
+  if (isLinear) {
+    useSidebarTabStore().activeSidebarTabId = null
+  }
+})
 
 const telemetry = useTelemetry()
 const firebaseAuthStore = useFirebaseAuthStore()
@@ -115,7 +132,6 @@ watch(
     } else {
       document.body.classList.add(DARK_THEME_CLASS)
     }
-
     if (isDesktop) {
       electronAPI().changeTheme({
         color: 'rgba(0, 0, 0, 0)',
@@ -126,11 +142,18 @@ watch(
   { immediate: true }
 )
 
+/**
+ * Reports task completion telemetry to Electron analytics when tasks
+ * transition from running to history.
+ *
+ * No `deep: true` needed — `queueStore.tasks` is a computed that spreads
+ * three `shallowRef` arrays into a new array on every change, and
+ * `TaskItemImpl` instances are immutable (replaced, never mutated).
+ */
 if (isDesktop) {
   watch(
     () => queueStore.tasks,
     (newTasks, oldTasks) => {
-      // Report tasks that previously running but are now completed (i.e. in history)
       const oldRunningTaskIds = new Set(
         oldTasks.filter((task) => task.isRunning).map((task) => task.jobId)
       )
@@ -145,8 +168,7 @@ if (isDesktop) {
             status: task.displayStatus.toLowerCase()
           })
         })
-    },
-    { deep: true }
+    }
   )
 }
 
@@ -203,6 +225,7 @@ useKeybindingService().registerCoreKeybindings()
 useSidebarTabStore().registerCoreSidebarTabs()
 void useBottomPanelStore().registerCoreBottomPanelTabs()
 
+useQueuePolling()
 const queuePendingTaskCountStore = useQueuePendingTaskCountStore()
 const sidebarTabStore = useSidebarTabStore()
 

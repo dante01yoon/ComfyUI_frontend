@@ -4,6 +4,7 @@
     :model="contextMenuItems"
     :pt="{
       root: {
+        id: contextMenuId,
         class: cn(
           'rounded-lg',
           'bg-secondary-background text-base-foreground',
@@ -11,7 +12,7 @@
         )
       }
     }"
-    @hide="emit('hide')"
+    @hide="onMenuHide"
   >
     <template #item="{ item, props }">
       <Button
@@ -29,16 +30,16 @@
 </template>
 
 <script setup lang="ts">
-import { onClickOutside } from '@vueuse/core'
 import ContextMenu from 'primevue/contextmenu'
 import type { MenuItem } from 'primevue/menuitem'
-import type { ComponentPublicInstance } from 'vue'
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/button/Button.vue'
+import { useDismissableOverlay } from '@/composables/useDismissableOverlay'
 import { isCloud } from '@/platform/distribution/types'
 import { supportsWorkflowMetadata } from '@/platform/workflow/utils/workflowExtractionUtil'
+import { isPreviewableMediaType } from '@/utils/formatUtil'
 import { detectNodeTypeFromFilename } from '@/utils/loaderNodeUtil'
 import { cn } from '@/utils/tailwindUtil'
 
@@ -73,22 +74,23 @@ const emit = defineEmits<{
   'bulk-export-workflow': [assets: AssetItem[]]
 }>()
 
-type ContextMenuInstance = ComponentPublicInstance & {
+type ContextMenuHandle = {
   show: (event: MouseEvent) => void
   hide: () => void
 }
 
-const contextMenu = ref<ContextMenuInstance | null>(null)
+const contextMenu = ref<ContextMenuHandle | null>(null)
+const contextMenuId = useId()
+const isVisible = ref(false)
 const actions = useMediaAssetActions()
 const { t } = useI18n()
 
-// Close context menu when clicking outside
-onClickOutside(
-  computed(() => contextMenu.value?.$el),
-  () => {
-    hide()
-  }
-)
+useDismissableOverlay({
+  isOpen: isVisible,
+  getOverlayEl: () => document.getElementById(contextMenuId),
+  onDismiss: hide,
+  dismissOnScroll: true
+})
 
 const showAddToWorkflow = computed(() => {
   // Output assets can always be added
@@ -193,8 +195,8 @@ const contextMenuItems = computed<MenuItem[]>(() => {
 
   // Individual mode: Show all menu options
 
-  // Inspect (if not 3D)
-  if (fileKind !== '3D') {
+  // Inspect
+  if (isPreviewableMediaType(fileKind)) {
     items.push({
       label: t('mediaAsset.actions.inspect'),
       icon: 'icon-[lucide--zoom-in]',
@@ -265,11 +267,18 @@ const contextMenuItems = computed<MenuItem[]>(() => {
   return items
 })
 
-const show = (event: MouseEvent) => {
+function onMenuHide() {
+  isVisible.value = false
+  emit('hide')
+}
+
+function show(event: MouseEvent) {
+  isVisible.value = true
   contextMenu.value?.show(event)
 }
 
-const hide = () => {
+function hide() {
+  isVisible.value = false
   contextMenu.value?.hide()
 }
 

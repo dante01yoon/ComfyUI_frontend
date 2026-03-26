@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { until } from '@vueuse/core'
 import Button from 'primevue/button'
 import ProgressSpinner from 'primevue/progressspinner'
 import { computed, onMounted, ref } from 'vue'
@@ -20,13 +19,14 @@ const router = useRouter()
 const { reportError, accessBillingPortal } = useFirebaseAuthActions()
 const { wrapWithErrorHandlingAsync } = useErrorHandling()
 
-const { isActiveSubscription, isInitialized } = useBillingContext()
+const { isActiveSubscription, isInitialized, initialize } = useBillingContext()
 
 const selectedTierKey = ref<TierKey | null>(null)
 
 const tierDisplayName = computed(() => {
   if (!selectedTierKey.value) return ''
   const names: Record<TierKey, string> = {
+    free: t('subscription.tiers.free.name'),
     standard: t('subscription.tiers.standard.name'),
     creator: t('subscription.tiers.creator.name'),
     pro: t('subscription.tiers.pro.name'),
@@ -58,6 +58,7 @@ const runRedirect = wrapWithErrorHandlingAsync(async () => {
     return
   }
 
+  // Only paid tiers can be checked out via redirect
   const validTierKeys: TierKey[] = ['standard', 'creator', 'pro', 'founder']
   if (!(validTierKeys as string[]).includes(tierKeyParam)) {
     await router.push('/')
@@ -74,7 +75,7 @@ const runRedirect = wrapWithErrorHandlingAsync(async () => {
   }
 
   if (!isInitialized.value) {
-    await until(isInitialized).toBe(true)
+    await initialize()
   }
 
   if (isActiveSubscription.value) {
@@ -95,17 +96,17 @@ onMounted(() => {
 
 <template>
   <div
-    class="flex h-full w-full items-center justify-center bg-comfy-menu-secondary-bg"
+    class="bg-comfy-menu-secondary-bg flex size-full items-center justify-center"
   >
     <div class="flex flex-col items-center gap-4">
       <img
         src="/assets/images/comfy-logo-single.svg"
         :alt="t('g.comfyOrgLogoAlt')"
-        class="h-16 w-16"
+        class="size-16"
       />
       <p
         v-if="selectedTierKey"
-        class="font-inter text-base font-normal leading-normal text-base-foreground"
+        class="font-inter text-base/normal font-normal text-base-foreground"
       >
         {{
           t('subscription.subscribeTo', {
@@ -113,11 +114,7 @@ onMounted(() => {
           })
         }}
       </p>
-      <ProgressSpinner
-        v-if="selectedTierKey"
-        class="h-8 w-8"
-        stroke-width="4"
-      />
+      <ProgressSpinner v-if="selectedTierKey" class="size-8" stroke-width="4" />
       <Button
         v-if="selectedTierKey"
         as="a"

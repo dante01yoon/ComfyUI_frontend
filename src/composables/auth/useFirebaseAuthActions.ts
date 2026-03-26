@@ -9,6 +9,7 @@ import { t } from '@/i18n'
 import { isCloud } from '@/platform/distribution/types'
 import { useTelemetry } from '@/platform/telemetry'
 import { useToastStore } from '@/platform/updates/common/toastStore'
+import { useWorkflowStore } from '@/platform/workflow/management/stores/workflowStore'
 import { useDialogService } from '@/services/dialogService'
 import { useFirebaseAuthStore } from '@/stores/firebaseAuthStore'
 import type { BillingPortalTargetTier } from '@/stores/firebaseAuthStore'
@@ -51,6 +52,17 @@ export const useFirebaseAuthActions = () => {
   }
 
   const logout = wrapWithErrorHandlingAsync(async () => {
+    const workflowStore = useWorkflowStore()
+    if (workflowStore.modifiedWorkflows.length > 0) {
+      const dialogService = useDialogService()
+      const confirmed = await dialogService.confirm({
+        title: t('auth.signOut.unsavedChangesTitle'),
+        message: t('auth.signOut.unsavedChangesMessage'),
+        type: 'dirtyClose'
+      })
+      if (!confirmed) return
+    }
+
     await authStore.logout()
     toastStore.add({
       severity: 'success',
@@ -128,13 +140,19 @@ export const useFirebaseAuthActions = () => {
     return result
   }, reportError)
 
-  const signInWithGoogle = wrapWithErrorHandlingAsync(async () => {
-    return await authStore.loginWithGoogle()
-  }, reportError)
+  const signInWithGoogle = wrapWithErrorHandlingAsync(
+    async (options?: { isNewUser?: boolean }) => {
+      return await authStore.loginWithGoogle(options)
+    },
+    reportError
+  )
 
-  const signInWithGithub = wrapWithErrorHandlingAsync(async () => {
-    return await authStore.loginWithGithub()
-  }, reportError)
+  const signInWithGithub = wrapWithErrorHandlingAsync(
+    async (options?: { isNewUser?: boolean }) => {
+      return await authStore.loginWithGithub(options)
+    },
+    reportError
+  )
 
   const signInWithEmail = wrapWithErrorHandlingAsync(
     async (email: string, password: string) => {

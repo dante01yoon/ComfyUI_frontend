@@ -178,6 +178,71 @@ describe('useModelToNodeStore', () => {
       ).toBeUndefined()
     })
 
+    describe('progressive hierarchical fallback', () => {
+      it('should resolve 1-level path via exact match', () => {
+        const modelToNodeStore = useModelToNodeStore()
+        modelToNodeStore.quickRegister('level1', 'UNETLoader', 'key1')
+
+        const provider = modelToNodeStore.getNodeProvider('level1')
+        expect(provider?.nodeDef?.name).toBe('UNETLoader')
+      })
+
+      it('should resolve 2-level path to registered parent', () => {
+        const modelToNodeStore = useModelToNodeStore()
+        modelToNodeStore.quickRegister('level1', 'UNETLoader', 'key1')
+
+        const provider = modelToNodeStore.getNodeProvider('level1/child')
+        expect(provider?.nodeDef?.name).toBe('UNETLoader')
+      })
+
+      it('should resolve 3-level path to nearest registered ancestor', () => {
+        const modelToNodeStore = useModelToNodeStore()
+        modelToNodeStore.quickRegister('level1', 'UNETLoader', 'key1')
+        modelToNodeStore.quickRegister('level1/level2', 'VAELoader', 'key2')
+
+        // 3 levels: should match level1/level2 (nearest), not level1
+        const provider = modelToNodeStore.getNodeProvider('level1/level2/child')
+        expect(provider?.nodeDef?.name).toBe('VAELoader')
+      })
+
+      it('should resolve 4-level path to nearest registered ancestor', () => {
+        const modelToNodeStore = useModelToNodeStore()
+        modelToNodeStore.quickRegister('a', 'UNETLoader', 'k1')
+        modelToNodeStore.quickRegister('a/b', 'VAELoader', 'k2')
+        modelToNodeStore.quickRegister('a/b/c', 'StyleModelLoader', 'k3')
+
+        // 4 levels: should match a/b/c (nearest), not a/b or a
+        const provider = modelToNodeStore.getNodeProvider('a/b/c/d')
+        expect(provider?.nodeDef?.name).toBe('StyleModelLoader')
+      })
+
+      it('should skip intermediate unregistered levels', () => {
+        const modelToNodeStore = useModelToNodeStore()
+        modelToNodeStore.quickRegister('a', 'UNETLoader', 'k1')
+        // a/b is NOT registered
+
+        // 3 levels: a/b not found, falls back to a
+        const provider = modelToNodeStore.getNodeProvider('a/b/c')
+        expect(provider?.nodeDef?.name).toBe('UNETLoader')
+      })
+
+      it('should prefer exact match over any fallback', () => {
+        const modelToNodeStore = useModelToNodeStore()
+        modelToNodeStore.quickRegister('a', 'UNETLoader', 'k1')
+        modelToNodeStore.quickRegister('a/b/c', 'VAELoader', 'k2')
+
+        const provider = modelToNodeStore.getNodeProvider('a/b/c')
+        expect(provider?.nodeDef?.name).toBe('VAELoader')
+      })
+
+      it('should return undefined when no ancestor is registered', () => {
+        const modelToNodeStore = useModelToNodeStore()
+        modelToNodeStore.quickRegister('x', 'UNETLoader', 'k1')
+
+        expect(modelToNodeStore.getNodeProvider('y/z/w')).toBeUndefined()
+      })
+    })
+
     it('should return provider for chatterbox nodes with empty key', () => {
       const modelToNodeStore = useModelToNodeStore()
       modelToNodeStore.registerDefaults()
@@ -190,78 +255,28 @@ describe('useModelToNodeStore', () => {
       expect(provider?.key).toBe('')
     })
 
-    it('should return provider for new extension model types', () => {
-      const modelToNodeStore = useModelToNodeStore()
-      modelToNodeStore.registerDefaults()
+    it.each([
+      ['sam2', 'DownloadAndLoadSAM2Model', 'model'],
+      ['sams', 'SAMLoader', 'model_name'],
+      ['ipadapter', 'IPAdapterModelLoader', 'ipadapter_file'],
+      ['depthanything', 'DownloadAndLoadDepthAnythingV2Model', 'model'],
+      ['ultralytics/bbox', 'UltralyticsDetectorProvider', 'model_name'],
+      ['ultralytics/segm', 'UltralyticsDetectorProvider', 'model_name'],
+      ['FlashVSR', 'FlashVSRNode', ''],
+      ['FlashVSR-v1.1', 'FlashVSRNode', ''],
+      ['segformer_b2_clothes', 'LS_LoadSegformerModel', 'model_name'],
+      ['segformer_b3_fashion', 'LS_LoadSegformerModel', 'model_name']
+    ])(
+      'should return correct provider for %s',
+      (modelType, expectedNodeName, expectedKey) => {
+        const modelToNodeStore = useModelToNodeStore()
+        modelToNodeStore.registerDefaults()
 
-      // SAM2
-      const sam2Provider = modelToNodeStore.getNodeProvider('sam2')
-      expect(sam2Provider?.nodeDef?.name).toBe('DownloadAndLoadSAM2Model')
-      expect(sam2Provider?.key).toBe('model')
-
-      // SAMLoader (original SAM)
-      const samsProvider = modelToNodeStore.getNodeProvider('sams')
-      expect(samsProvider?.nodeDef?.name).toBe('SAMLoader')
-      expect(samsProvider?.key).toBe('model_name')
-
-      // IP-Adapter
-      const ipadapterProvider = modelToNodeStore.getNodeProvider('ipadapter')
-      expect(ipadapterProvider?.nodeDef?.name).toBe('IPAdapterModelLoader')
-      expect(ipadapterProvider?.key).toBe('ipadapter_file')
-
-      // DepthAnything
-      const depthProvider = modelToNodeStore.getNodeProvider('depthanything')
-      expect(depthProvider?.nodeDef?.name).toBe(
-        'DownloadAndLoadDepthAnythingV2Model'
-      )
-      expect(depthProvider?.key).toBe('model')
-    })
-
-    it('should use hierarchical fallback for ultralytics subcategories', () => {
-      const modelToNodeStore = useModelToNodeStore()
-      modelToNodeStore.registerDefaults()
-
-      // ultralytics/bbox should fall back to ultralytics
-      const bboxProvider = modelToNodeStore.getNodeProvider('ultralytics/bbox')
-      expect(bboxProvider?.nodeDef?.name).toBe('UltralyticsDetectorProvider')
-      expect(bboxProvider?.key).toBe('model_name')
-
-      // ultralytics/segm should also fall back to ultralytics
-      const segmProvider = modelToNodeStore.getNodeProvider('ultralytics/segm')
-      expect(segmProvider?.nodeDef?.name).toBe('UltralyticsDetectorProvider')
-    })
-
-    it('should return provider for FlashVSR nodes with empty key (auto-load)', () => {
-      const modelToNodeStore = useModelToNodeStore()
-      modelToNodeStore.registerDefaults()
-
-      const flashVSRProvider = modelToNodeStore.getNodeProvider('FlashVSR')
-      expect(flashVSRProvider?.nodeDef?.name).toBe('FlashVSRNode')
-      expect(flashVSRProvider?.key).toBe('')
-
-      const flashVSR11Provider =
-        modelToNodeStore.getNodeProvider('FlashVSR-v1.1')
-      expect(flashVSR11Provider?.nodeDef?.name).toBe('FlashVSRNode')
-      expect(flashVSR11Provider?.key).toBe('')
-    })
-
-    it('should return provider for segformer models', () => {
-      const modelToNodeStore = useModelToNodeStore()
-      modelToNodeStore.registerDefaults()
-
-      const segformerB2Provider = modelToNodeStore.getNodeProvider(
-        'segformer_b2_clothes'
-      )
-      expect(segformerB2Provider?.nodeDef?.name).toBe('LS_LoadSegformerModel')
-      expect(segformerB2Provider?.key).toBe('model_name')
-
-      const segformerB3FashionProvider = modelToNodeStore.getNodeProvider(
-        'segformer_b3_fashion'
-      )
-      expect(segformerB3FashionProvider?.nodeDef?.name).toBe(
-        'LS_LoadSegformerModel'
-      )
-    })
+        const provider = modelToNodeStore.getNodeProvider(modelType)
+        expect(provider?.nodeDef?.name).toBe(expectedNodeName)
+        expect(provider?.key).toBe(expectedKey)
+      }
+    )
   })
 
   describe('getAllNodeProviders', () => {

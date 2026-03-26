@@ -1,9 +1,7 @@
 import { defineStore } from 'pinia'
-import { computed, ref, watch } from 'vue'
-import { isEmpty } from 'es-toolkit/compat'
+import { computed, ref, shallowRef } from 'vue'
 
 import { useNodeProgressText } from '@/composables/node/useNodeProgressText'
-import type { LGraph, Subgraph } from '@/lib/litegraph/src/litegraph'
 import { isCloud } from '@/platform/distribution/types'
 import { useTelemetry } from '@/platform/telemetry'
 import type { ComfyWorkflow } from '@/platform/workflow/management/stores/workflowStore'
@@ -21,21 +19,20 @@ import type {
   ExecutionInterruptedWsMessage,
   ExecutionStartWsMessage,
   ExecutionSuccessWsMessage,
-  NodeError,
   NodeProgressState,
   NotificationWsMessage,
   ProgressStateWsMessage,
   ProgressTextWsMessage,
-  ProgressWsMessage,
-  PromptError
+  ProgressWsMessage
 } from '@/schemas/apiSchema'
 import { api } from '@/scripts/api'
 import { app } from '@/scripts/app'
-import { useNodeOutputStore } from '@/stores/imagePreviewStore'
+import { useNodeOutputStore } from '@/stores/nodeOutputStore'
 import { useJobPreviewStore } from '@/stores/jobPreviewStore'
+import { useExecutionErrorStore } from '@/stores/executionErrorStore'
 import type { NodeLocatorId } from '@/types/nodeIdentification'
-import { createNodeLocatorId } from '@/types/nodeIdentification'
-import { forEachNode, getNodeByExecutionId } from '@/utils/graphTraversalUtil'
+import { classifyCloudValidationError } from '@/utils/executionErrorUtil'
+import { executionIdToNodeLocatorId } from '@/utils/graphTraversalUtil'
 
 interface QueuedJob {
   /**
@@ -49,73 +46,21 @@ interface QueuedJob {
   workflow?: ComfyWorkflow
 }
 
-const subgraphNodeIdToSubgraph = (id: string, graph: LGraph | Subgraph) => {
-  const node = graph.getNodeById(id)
-  if (node?.isSubgraphNode()) return node.subgraph
-}
-
 /**
- * Recursively get the subgraph objects for the given subgraph instance IDs
- * @param currentGraph The current graph
- * @param subgraphNodeIds The instance IDs
- * @param subgraphs The subgraphs
- * @returns The subgraphs that correspond to each of the instance IDs.
+ * Maximum number of job entries retained in {@link nodeProgressStatesByJob}.
+ * When exceeded, the oldest entries (by insertion order) are evicted to
+ * prevent unbounded memory growth in long-running sessions.
  */
-function getSubgraphsFromInstanceIds(
-  currentGraph: LGraph | Subgraph,
-  subgraphNodeIds: string[],
-  subgraphs: Subgraph[] = []
-): Subgraph[] | undefined {
-  // Last segment is the node portion; nothing to do.
-  if (subgraphNodeIds.length === 1) return subgraphs
-
-  const currentPart = subgraphNodeIds.shift()
-  if (currentPart === undefined) return subgraphs
-
-  const subgraph = subgraphNodeIdToSubgraph(currentPart, currentGraph)
-  if (!subgraph) {
-    console.warn(`Subgraph not found: ${currentPart}`)
-    return undefined
-  }
-
-  subgraphs.push(subgraph)
-  return getSubgraphsFromInstanceIds(subgraph, subgraphNodeIds, subgraphs)
-}
-
-/**
- * Convert execution context node IDs to NodeLocatorIds
- * @param nodeId The node ID from execution context (could be execution ID)
- * @returns The NodeLocatorId
- */
-function executionIdToNodeLocatorId(
-  nodeId: string | number
-): NodeLocatorId | undefined {
-  const nodeIdStr = String(nodeId)
-
-  if (!nodeIdStr.includes(':')) {
-    // It's a top-level node ID
-    return nodeIdStr
-  }
-
-  // It's an execution node ID
-  const parts = nodeIdStr.split(':')
-  const localNodeId = parts[parts.length - 1]
-  const subgraphs = getSubgraphsFromInstanceIds(app.rootGraph, parts)
-  if (!subgraphs) return undefined
-  const nodeLocatorId = createNodeLocatorId(subgraphs.at(-1)!.id, localNodeId)
-  return nodeLocatorId
-}
+export const MAX_PROGRESS_JOBS = 1000
 
 export const useExecutionStore = defineStore('execution', () => {
   const workflowStore = useWorkflowStore()
   const canvasStore = useCanvasStore()
+  const executionErrorStore = useExecutionErrorStore()
 
   const clientId = ref<string | null>(null)
   const activeJobId = ref<string | null>(null)
   const queuedJobs = ref<Record<NodeId, QueuedJob>>({})
-  const lastNodeErrors = ref<Record<NodeId, NodeError> | null>(null)
-  const lastExecutionError = ref<ExecutionErrorWsMessage | null>(null)
-  const lastPromptError = ref<PromptError | null>(null)
   // This is the progress of all nodes in the currently executing workflow
   const nodeProgressStates = ref<Record<string, NodeProgressState>>({})
   const nodeProgressStatesByJob = ref<
@@ -127,7 +72,31 @@ export const useExecutionStore = defineStore('execution', () => {
    */
   const jobIdToWorkflowId = ref<Map<string, string>>(new Map())
 
+  /**
+   * Map of job ID to workflow file path in the current session.
+   * Only populated for jobs that are queued in this browser tab.
+   */
+  const jobIdToSessionWorkflowPath = shallowRef<Map<string, string>>(new Map())
+
   const initializingJobIds = ref<Set<string>>(new Set())
+
+  /**
+   * Cache for executionIdToNodeLocatorId lookups.
+   * Avoids redundant graph traversals during a single execution run.
+   * Cleared at execution start and end to ensure fresh graph state.
+   */
+  const executionIdToLocatorCache = new Map<string, NodeLocatorId | undefined>()
+
+  function cachedExecutionIdToLocator(
+    executionId: string
+  ): NodeLocatorId | undefined {
+    if (executionIdToLocatorCache.has(executionId)) {
+      return executionIdToLocatorCache.get(executionId)
+    }
+    const locatorId = executionIdToNodeLocatorId(app.rootGraph, executionId)
+    executionIdToLocatorCache.set(executionId, locatorId)
+    return locatorId
+  }
 
   const mergeExecutionProgressStates = (
     currentState: NodeProgressState | undefined,
@@ -168,7 +137,7 @@ export const useExecutionStore = defineStore('execution', () => {
       const parts = String(state.display_node_id).split(':')
       for (let i = 0; i < parts.length; i++) {
         const executionId = parts.slice(0, i + 1).join(':')
-        const locatorId = executionIdToNodeLocatorId(executionId)
+        const locatorId = cachedExecutionIdToLocator(executionId)
         if (!locatorId) continue
 
         result[locatorId] = mergeExecutionProgressStates(
@@ -245,19 +214,6 @@ export const useExecutionStore = defineStore('execution', () => {
     return total > 0 ? done / total : 0
   })
 
-  const lastExecutionErrorNodeLocatorId = computed(() => {
-    const err = lastExecutionError.value
-    if (!err) return null
-    return executionIdToNodeLocatorId(String(err.node_id))
-  })
-
-  const lastExecutionErrorNodeId = computed(() => {
-    const locator = lastExecutionErrorNodeLocatorId.value
-    if (!locator) return null
-    const localId = workflowStore.nodeLocatorIdToNodeId(locator)
-    return localId != null ? String(localId) : null
-  })
-
   function bindExecutionEvents() {
     api.addEventListener('notification', handleNotification)
     api.addEventListener('execution_start', handleExecutionStart)
@@ -289,11 +245,18 @@ export const useExecutionStore = defineStore('execution', () => {
   }
 
   function handleExecutionStart(e: CustomEvent<ExecutionStartWsMessage>) {
-    lastExecutionError.value = null
-    lastPromptError.value = null
+    executionIdToLocatorCache.clear()
+    executionErrorStore.clearAllErrors()
     activeJobId.value = e.detail.prompt_id
     queuedJobs.value[activeJobId.value] ??= { nodes: {} }
     clearInitializationByJobId(activeJobId.value)
+
+    // Ensure path mapping exists — execution_start can arrive via WebSocket
+    // before the HTTP response from queuePrompt triggers storeJob.
+    if (!jobIdToSessionWorkflowPath.value.has(activeJobId.value)) {
+      const path = queuedJobs.value[activeJobId.value]?.workflow?.path
+      if (path) ensureSessionWorkflowPath(activeJobId.value, path)
+    }
   }
 
   function handleExecutionCached(e: CustomEvent<ExecutionCachedWsMessage>) {
@@ -341,6 +304,34 @@ export const useExecutionStore = defineStore('execution', () => {
     }
   }
 
+  /**
+   * Evicts the oldest entries from {@link nodeProgressStatesByJob} when the
+   * map exceeds {@link MAX_PROGRESS_JOBS}, preventing unbounded memory
+   * growth in long-running sessions.
+   *
+   * Relies on ES2015+ object key insertion order: the first keys returned
+   * by `Object.keys` are the oldest entries.
+   *
+   * @example
+   * ```ts
+   * // Given 105 entries, evicts the 5 oldest:
+   * evictOldProgressJobs()
+   * Object.keys(nodeProgressStatesByJob.value).length // => 100
+   * ```
+   */
+  function evictOldProgressJobs() {
+    const current = nodeProgressStatesByJob.value
+    const keys = Object.keys(current)
+    if (keys.length <= MAX_PROGRESS_JOBS) return
+
+    const pruned: Record<string, Record<string, NodeProgressState>> = {}
+    const keysToKeep = keys.slice(keys.length - MAX_PROGRESS_JOBS)
+    for (const key of keysToKeep) {
+      pruned[key] = current[key]
+    }
+    nodeProgressStatesByJob.value = pruned
+  }
+
   function handleProgressState(e: CustomEvent<ProgressStateWsMessage>) {
     const { nodes, prompt_id: jobId } = e.detail
 
@@ -363,6 +354,7 @@ export const useExecutionStore = defineStore('execution', () => {
       ...nodeProgressStatesByJob.value,
       [jobId]: nodes
     }
+    evictOldProgressJobs()
     nodeProgressStates.value = nodes
 
     // If we have progress for the currently executing node, update it for backwards compatibility
@@ -391,7 +383,6 @@ export const useExecutionStore = defineStore('execution', () => {
   }
 
   function handleExecutionError(e: CustomEvent<ExecutionErrorWsMessage>) {
-    lastExecutionError.value = e.detail
     if (isCloud) {
       useTelemetry()?.trackExecutionError({
         jobId: e.detail.prompt_id,
@@ -399,9 +390,53 @@ export const useExecutionStore = defineStore('execution', () => {
         nodeType: e.detail.node_type,
         error: e.detail.exception_message
       })
+
+      // Cloud wraps validation errors (400) in exception_message as embedded JSON.
+      if (handleCloudValidationError(e.detail)) return
     }
+
+    // Service-level errors (e.g. "Job has stagnated") have no associated node.
+    // Route them as job errors
+    if (handleServiceLevelError(e.detail)) return
+
+    // OSS path / Cloud fallback (real runtime errors)
+    executionErrorStore.lastExecutionError = e.detail
     clearInitializationByJobId(e.detail.prompt_id)
     resetExecutionState(e.detail.prompt_id)
+  }
+
+  function handleServiceLevelError(detail: ExecutionErrorWsMessage): boolean {
+    const nodeId = detail.node_id
+    if (nodeId !== null && nodeId !== undefined && String(nodeId) !== '')
+      return false
+
+    clearInitializationByJobId(detail.prompt_id)
+    resetExecutionState(detail.prompt_id)
+    executionErrorStore.lastPromptError = {
+      type: detail.exception_type ?? 'error',
+      message: detail.exception_type
+        ? `${detail.exception_type}: ${detail.exception_message}`
+        : (detail.exception_message ?? ''),
+      details: detail.traceback?.join('\n') ?? ''
+    }
+    return true
+  }
+
+  function handleCloudValidationError(
+    detail: ExecutionErrorWsMessage
+  ): boolean {
+    const result = classifyCloudValidationError(detail.exception_message)
+    if (!result) return false
+
+    clearInitializationByJobId(detail.prompt_id)
+    resetExecutionState(detail.prompt_id)
+
+    if (result.kind === 'nodeErrors') {
+      executionErrorStore.lastNodeErrors = result.nodeErrors
+    } else {
+      executionErrorStore.lastPromptError = result.promptError
+    }
+    return true
   }
 
   /**
@@ -457,6 +492,7 @@ export const useExecutionStore = defineStore('execution', () => {
    * Reset execution-related state after a run completes or is stopped.
    */
   function resetExecutionState(jobIdParam?: string | null) {
+    executionIdToLocatorCache.clear()
     nodeProgressStates.value = {}
     const jobId = jobIdParam ?? activeJobId.value ?? null
     if (jobId) {
@@ -470,7 +506,7 @@ export const useExecutionStore = defineStore('execution', () => {
     }
     activeJobId.value = null
     _executingNodeProgress.value = null
-    lastPromptError.value = null
+    executionErrorStore.clearPromptError()
   }
 
   function getNodeIdIfExecuting(nodeId: string | number) {
@@ -481,11 +517,16 @@ export const useExecutionStore = defineStore('execution', () => {
   }
 
   function handleProgressText(e: CustomEvent<ProgressTextWsMessage>) {
-    const { nodeId, text } = e.detail
+    const { nodeId, text, prompt_id } = e.detail
     if (!text || !nodeId) return
+
+    // Filter: only accept progress for the active prompt
+    if (prompt_id && activeJobId.value && prompt_id !== activeJobId.value)
+      return
 
     // Handle execution node IDs for subgraphs
     const currentId = getNodeIdIfExecuting(nodeId)
+    if (!currentId) return
     const node = canvasStore.getCanvas().graph?.getNodeById(currentId)
     if (!node) return
 
@@ -515,6 +556,24 @@ export const useExecutionStore = defineStore('execution', () => {
     if (wid) {
       jobIdToWorkflowId.value.set(String(id), String(wid))
     }
+    if (workflow?.path) {
+      ensureSessionWorkflowPath(String(id), workflow.path)
+    }
+  }
+
+  // ~0.65 MB at capacity (32 char GUID key + 50 char path value)
+  const MAX_SESSION_PATH_ENTRIES = 4000
+
+  function ensureSessionWorkflowPath(jobId: string, path: string) {
+    if (jobIdToSessionWorkflowPath.value.get(jobId) === path) return
+    const next = new Map(jobIdToSessionWorkflowPath.value)
+    next.set(jobId, path)
+    while (next.size > MAX_SESSION_PATH_ENTRIES) {
+      const oldest = next.keys().next().value
+      if (oldest !== undefined) next.delete(oldest)
+      else break
+    }
+    jobIdToSessionWorkflowPath.value = next
   }
 
   /**
@@ -551,141 +610,11 @@ export const useExecutionStore = defineStore('execution', () => {
     () => runningJobIds.value.length
   )
 
-  /** Map of node errors indexed by locator ID. */
-  const nodeErrorsByLocatorId = computed<Record<NodeLocatorId, NodeError>>(
-    () => {
-      if (!lastNodeErrors.value) return {}
-
-      const map: Record<NodeLocatorId, NodeError> = {}
-
-      for (const [executionId, nodeError] of Object.entries(
-        lastNodeErrors.value
-      )) {
-        const locatorId = executionIdToNodeLocatorId(executionId)
-        if (locatorId) {
-          map[locatorId] = nodeError
-        }
-      }
-
-      return map
-    }
-  )
-
-  /** Get node errors by locator ID. */
-  const getNodeErrors = (
-    nodeLocatorId: NodeLocatorId
-  ): NodeError | undefined => {
-    return nodeErrorsByLocatorId.value[nodeLocatorId]
-  }
-
-  /** Check if a specific slot has validation errors. */
-  const slotHasError = (
-    nodeLocatorId: NodeLocatorId,
-    slotName: string
-  ): boolean => {
-    const nodeError = getNodeErrors(nodeLocatorId)
-    if (!nodeError) return false
-
-    return nodeError.errors.some((e) => e.extra_info?.input_name === slotName)
-  }
-
-  /**
-   * Update node and slot error flags when validation errors change.
-   * Propagates errors up subgraph chains.
-   */
-  watch(lastNodeErrors, () => {
-    if (!app.rootGraph) return
-
-    // Clear all error flags
-    forEachNode(app.rootGraph, (node) => {
-      node.has_errors = false
-      if (node.inputs) {
-        for (const slot of node.inputs) {
-          slot.hasErrors = false
-        }
-      }
-    })
-
-    if (!lastNodeErrors.value) return
-
-    // Set error flags on nodes and slots
-    for (const [executionId, nodeError] of Object.entries(
-      lastNodeErrors.value
-    )) {
-      const node = getNodeByExecutionId(app.rootGraph, executionId)
-      if (!node) continue
-
-      node.has_errors = true
-
-      // Mark input slots with errors
-      if (node.inputs) {
-        for (const error of nodeError.errors) {
-          const slotName = error.extra_info?.input_name
-          if (!slotName) continue
-
-          const slot = node.inputs.find((s) => s.name === slotName)
-          if (slot) {
-            slot.hasErrors = true
-          }
-        }
-      }
-
-      // Propagate errors to parent subgraph nodes
-      const parts = executionId.split(':')
-      for (let i = parts.length - 1; i > 0; i--) {
-        const parentExecutionId = parts.slice(0, i).join(':')
-        const parentNode = getNodeByExecutionId(
-          app.rootGraph,
-          parentExecutionId
-        )
-        if (parentNode) {
-          parentNode.has_errors = true
-        }
-      }
-    }
-  })
-
-  /** Whether a runtime execution error is present */
-  const hasExecutionError = computed(() => !!lastExecutionError.value)
-
-  /** Whether a prompt-level error is present (e.g. invalid_prompt, prompt_no_outputs) */
-  const hasPromptError = computed(() => !!lastPromptError.value)
-
-  /** Whether any node validation errors are present */
-  const hasNodeError = computed(
-    () => !!lastNodeErrors.value && !isEmpty(lastNodeErrors.value)
-  )
-
-  /** Whether any error (node validation, runtime execution, or prompt-level) is present */
-  const hasAnyError = computed(
-    () => hasExecutionError.value || hasPromptError.value || hasNodeError.value
-  )
-
-  /** Pre-computed Set of graph node IDs (as strings) that have errors. */
-  const activeGraphErrorNodeIds = computed<Set<string>>(() => {
-    const ids = new Set<string>()
-    if (!app.rootGraph) return ids
-
-    const activeGraph = useCanvasStore().currentGraph ?? app.rootGraph
-
-    if (lastNodeErrors.value) {
-      for (const executionId of Object.keys(lastNodeErrors.value)) {
-        const graphNode = getNodeByExecutionId(app.rootGraph, executionId)
-        if (graphNode?.graph === activeGraph) {
-          ids.add(String(graphNode.id))
-        }
-      }
-    }
-
-    if (lastExecutionError.value) {
-      const execNodeId = String(lastExecutionError.value.node_id)
-      const graphNode = getNodeByExecutionId(app.rootGraph, execNodeId)
-      if (graphNode?.graph === activeGraph) {
-        ids.add(String(graphNode.id))
-      }
-    }
-
-    return ids
+  const isActiveWorkflowRunning = computed(() => {
+    if (!activeJobId.value) return false
+    const path = workflowStore.activeWorkflow?.path
+    if (!path) return false
+    return jobIdToSessionWorkflowPath.value.get(activeJobId.value) === path
   })
 
   return {
@@ -693,11 +622,6 @@ export const useExecutionStore = defineStore('execution', () => {
     clientId,
     activeJobId,
     queuedJobs,
-    lastNodeErrors,
-    lastExecutionError,
-    lastPromptError,
-    hasAnyError,
-    lastExecutionErrorNodeId,
     executingNodeId,
     executingNodeIds,
     activeJob,
@@ -712,6 +636,7 @@ export const useExecutionStore = defineStore('execution', () => {
     runningJobIds,
     runningWorkflowCount,
     initializingJobIds,
+    isActiveWorkflowRunning,
     isJobInitializing,
     clearInitializationByJobId,
     clearInitializationByJobIds,
@@ -724,12 +649,9 @@ export const useExecutionStore = defineStore('execution', () => {
     // Raw executing progress data for backward compatibility in ComfyApp.
     _executingNodeProgress,
     // NodeLocatorId conversion helpers
-    executionIdToNodeLocatorId,
     nodeLocatorIdToExecutionId,
     jobIdToWorkflowId,
-    // Node error lookup helpers
-    getNodeErrors,
-    slotHasError,
-    activeGraphErrorNodeIds
+    jobIdToSessionWorkflowPath,
+    ensureSessionWorkflowPath
   }
 })

@@ -4,7 +4,9 @@ import { defineStore } from 'pinia'
 import { computed, ref, watchEffect } from 'vue'
 
 import { t } from '@/i18n'
-import { isProxyWidget } from '@/core/graph/subgraph/proxyWidget'
+import { isPromotedWidgetView } from '@/core/graph/subgraph/promotedWidgetTypes'
+import { resolvePromotedWidgetSource } from '@/core/graph/subgraph/resolvePromotedWidgetSource'
+import { resolveInputType } from '@/core/graph/widgets/dynamicTypes'
 import { LiteGraph } from '@/lib/litegraph/src/litegraph'
 import type { LGraphNode } from '@/lib/litegraph/src/litegraph'
 import { transformNodeDefV1ToV2 } from '@/schemas/nodeDef/migration'
@@ -22,11 +24,8 @@ import type {
 import { useSettingStore } from '@/platform/settings/settingStore'
 import { NodeSearchService } from '@/services/nodeSearchService'
 import { useSubgraphStore } from '@/stores/subgraphStore'
-import {
-  NodeSourceType,
-  getEssentialsCategory,
-  getNodeSource
-} from '@/types/nodeSource'
+import { ESSENTIALS_CATEGORY_CANONICAL } from '@/constants/essentialsNodes'
+import { CORE_NODE_MODULES, getNodeSource } from '@/types/nodeSource'
 import type { NodeSource } from '@/types/nodeSource'
 import type { TreeNode } from '@/types/treeExplorerTypes'
 import type { FuseSearchable, SearchAuxScore } from '@/utils/fuseUtil'
@@ -89,6 +88,9 @@ export class ComfyNodeDefImpl
   readonly search_aliases?: string[]
   /** Category for the Essentials tab. If set, the node appears in Essentials. */
   readonly essentials_category?: string
+  /** Whether the blueprint is a global/installed blueprint (not user-created). */
+  readonly isGlobal?: boolean
+  readonly isCoreNode: boolean
 
   // V2 fields
   readonly inputs: Record<string, InputSpecV2>
@@ -97,6 +99,7 @@ export class ComfyNodeDefImpl
 
   // ComfyNodeDefImpl fields
   readonly nodeSource: NodeSource
+  readonly inputTypes: string[]
 
   /**
    * @internal
@@ -160,10 +163,14 @@ export class ComfyNodeDefImpl
     this.output_tooltips = obj.output_tooltips
     this.input_order = obj.input_order
     this.price_badge = obj.price_badge
-    // Resolve essentials_category from API or fallback to mock data
-    this.essentials_category = getEssentialsCategory(
-      obj.name,
-      obj.essentials_category
+    this.essentials_category = obj.essentials_category
+      ? (ESSENTIALS_CATEGORY_CANONICAL.get(
+          obj.essentials_category.toLowerCase()
+        ) ?? obj.essentials_category)
+      : undefined
+    this.isGlobal = obj.isGlobal
+    this.isCoreNode = CORE_NODE_MODULES.includes(
+      this.python_module.split('.')[0]
     )
 
     // Initialize V2 fields
@@ -173,10 +180,9 @@ export class ComfyNodeDefImpl
     this.hidden = defV2.hidden
 
     // Initialize node source
-    this.nodeSource = getNodeSource(
-      obj.python_module,
-      this.essentials_category,
-      this.name
+    this.nodeSource = getNodeSource(obj.python_module, this.essentials_category)
+    this.inputTypes = _.uniq(
+      Object.values(this.inputs).flatMap(resolveInputType)
     )
   }
 
@@ -192,10 +198,6 @@ export class ComfyNodeDefImpl
     const nodeFrequencyStore = useNodeFrequencyStore()
     const nodeFrequency = nodeFrequencyStore.getNodeFrequencyByName(this.name)
     return [scores[0], -nodeFrequency, ...scores.slice(1)]
-  }
-
-  get isCoreNode(): boolean {
-    return this.nodeSource.type === NodeSourceType.Core
   }
 
   get nodeLifeCycleBadgeText(): string {
@@ -368,6 +370,14 @@ export const useNodeDefStore = defineStore('nodeDef', () => {
     }
     return types
   })
+  const allNodeDefsByName = computed(() => {
+    const map: Record<string, ComfyNodeDefImpl> = {}
+    for (const nodeDef of nodeDefs.value) {
+      map[nodeDef.name] = nodeDef
+    }
+    return map
+  })
+
   const visibleNodeDefs = computed(() => {
     return nodeDefs.value.filter((nodeDef) =>
       nodeDefFilters.value.every((filter) => filter.predicate(nodeDef))
@@ -418,14 +428,12 @@ export const useNodeDefStore = defineStore('nodeDef', () => {
       return nodeDef.inputs[widgetName]
     }
     const widget = node.widgets?.find((w) => w.name === widgetName)
-    //TODO: resolve spec for linked
-    if (!widget || !isProxyWidget(widget)) return undefined
+    if (!widget || !isPromotedWidgetView(widget)) return undefined
 
-    const { nodeId, widgetName: subWidgetName } = widget._overlay
-    const subNode = node.subgraph.getNodeById(nodeId)
-    if (!subNode) return undefined
+    const sourceWidget = resolvePromotedWidgetSource(node, widget)
+    if (!sourceWidget) return undefined
 
-    return getInputSpecForWidget(subNode, subWidgetName)
+    return getInputSpecForWidget(sourceWidget.node, sourceWidget.widget.name)
   }
 
   /**
@@ -493,6 +501,7 @@ export const useNodeDefStore = defineStore('nodeDef', () => {
   return {
     nodeDefsByName,
     nodeDefsByDisplayName,
+    allNodeDefsByName,
     showDeprecated,
     showExperimental,
     showDevOnly,

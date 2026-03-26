@@ -1,179 +1,246 @@
-import type { Locator } from '@playwright/test'
 import { expect } from '@playwright/test'
 
 import type { Keybinding } from '../../src/platform/keybindings/types'
 import { comfyPageFixture as test } from '../fixtures/ComfyPage'
 import { DefaultGraphPositions } from '../fixtures/constants/defaultGraphPositions'
+import { TestIds } from '../fixtures/selectors'
 
 test.beforeEach(async ({ comfyPage }) => {
   await comfyPage.settings.setSetting('Comfy.UseNewMenu', 'Disabled')
 })
 
-test.describe('Load workflow warning', { tag: '@ui' }, () => {
-  test('Should display a warning when loading a workflow with missing nodes', async ({
+test.describe('Missing nodes in Error Overlay', { tag: '@ui' }, () => {
+  test.beforeEach(async ({ comfyPage }) => {
+    await comfyPage.settings.setSetting('Comfy.UseNewMenu', 'Top')
+    await comfyPage.settings.setSetting(
+      'Comfy.RightSidePanel.ShowErrorsTab',
+      true
+    )
+  })
+
+  test('Should show error overlay when loading a workflow with missing nodes', async ({
     comfyPage
   }) => {
     await comfyPage.workflow.loadWorkflow('missing/missing_nodes')
 
-    // Wait for the element with the .comfy-missing-nodes selector to be visible
-    const missingNodesWarning = comfyPage.page.locator('.comfy-missing-nodes')
-    await expect(missingNodesWarning).toBeVisible()
+    const errorOverlay = comfyPage.page.getByTestId(
+      TestIds.dialogs.errorOverlay
+    )
+    await expect(errorOverlay).toBeVisible()
+
+    const missingNodesTitle = errorOverlay.getByText(/Missing Node Packs/)
+    await expect(missingNodesTitle).toBeVisible()
   })
 
-  test('Should display a warning when loading a workflow with missing nodes in subgraphs', async ({
+  test('Should show error overlay when loading a workflow with missing nodes in subgraphs', async ({
     comfyPage
   }) => {
     await comfyPage.workflow.loadWorkflow('missing/missing_nodes_in_subgraph')
 
-    // Wait for the element with the .comfy-missing-nodes selector to be visible
-    const missingNodesWarning = comfyPage.page.locator('.comfy-missing-nodes')
-    await expect(missingNodesWarning).toBeVisible()
+    const errorOverlay = comfyPage.page.getByTestId(
+      TestIds.dialogs.errorOverlay
+    )
+    await expect(errorOverlay).toBeVisible()
 
-    // Verify the missing node text includes subgraph context
-    const warningText = await missingNodesWarning.textContent()
-    expect(warningText).toContain('MISSING_NODE_TYPE_IN_SUBGRAPH')
-    expect(warningText).toContain('in subgraph')
+    const missingNodesTitle = errorOverlay.getByText(/Missing Node Packs/)
+    await expect(missingNodesTitle).toBeVisible()
+
+    // Click "See Errors" to open the errors tab and verify subgraph node content
+    await errorOverlay
+      .getByTestId(TestIds.dialogs.errorOverlaySeeErrors)
+      .click()
+    await expect(errorOverlay).not.toBeVisible()
+
+    const missingNodeCard = comfyPage.page.getByTestId(
+      TestIds.dialogs.missingNodeCard
+    )
+    await expect(missingNodeCard).toBeVisible()
+
+    // Expand the pack group row to reveal node type names
+    await missingNodeCard
+      .getByRole('button', { name: /expand/i })
+      .first()
+      .click()
+    await expect(
+      missingNodeCard.getByText('MISSING_NODE_TYPE_IN_SUBGRAPH')
+    ).toBeVisible()
+  })
+
+  test('Should show MissingNodeCard in errors tab when clicking See Errors', async ({
+    comfyPage
+  }) => {
+    await comfyPage.workflow.loadWorkflow('missing/missing_nodes')
+
+    const errorOverlay = comfyPage.page.getByTestId(
+      TestIds.dialogs.errorOverlay
+    )
+    await expect(errorOverlay).toBeVisible()
+
+    // Click "See Errors" to open the right side panel errors tab
+    await errorOverlay
+      .getByTestId(TestIds.dialogs.errorOverlaySeeErrors)
+      .click()
+    await expect(errorOverlay).not.toBeVisible()
+
+    // Verify MissingNodeCard is rendered in the errors tab
+    const missingNodeCard = comfyPage.page.getByTestId(
+      TestIds.dialogs.missingNodeCard
+    )
+    await expect(missingNodeCard).toBeVisible()
   })
 })
 
-test('Does not report warning on undo/redo', async ({ comfyPage }) => {
-  await comfyPage.settings.setSetting('Comfy.NodeSearchBoxImpl', 'v1 (legacy)')
-
+test('Does not resurface missing nodes on undo/redo', async ({ comfyPage }) => {
+  await comfyPage.settings.setSetting('Comfy.UseNewMenu', 'Top')
+  await comfyPage.settings.setSetting(
+    'Comfy.RightSidePanel.ShowErrorsTab',
+    true
+  )
   await comfyPage.workflow.loadWorkflow('missing/missing_nodes')
-  await comfyPage.page
-    .locator('.p-dialog')
-    .getByRole('button', { name: 'Close' })
-    .click({ force: true })
-  await comfyPage.page.locator('.p-dialog').waitFor({ state: 'hidden' })
 
-  // Wait for any async operations to complete after dialog closes
+  const errorOverlay = comfyPage.page.getByTestId(TestIds.dialogs.errorOverlay)
+  await expect(errorOverlay).toBeVisible()
+
+  // Dismiss the error overlay
+  await errorOverlay.getByRole('button', { name: 'Dismiss' }).click()
+  await expect(errorOverlay).not.toBeVisible()
+
+  // Make a change to the graph by moving a node
+  await comfyPage.canvas.click()
+  await comfyPage.nextFrame()
+  await comfyPage.page.keyboard.press('Control+a')
+  await comfyPage.page.mouse.move(400, 300)
+  await comfyPage.page.mouse.down()
+  await comfyPage.page.mouse.move(450, 350, { steps: 5 })
+  await comfyPage.page.mouse.up()
   await comfyPage.nextFrame()
 
-  // Make a change to the graph
-  await comfyPage.canvasOps.doubleClick()
-  await comfyPage.searchBox.fillAndSelectFirstNode('KSampler')
-
-  // Undo and redo the change
+  // Undo and redo should not resurface the error overlay
   await comfyPage.keyboard.undo()
-  await expect(comfyPage.page.locator('.comfy-missing-nodes')).not.toBeVisible()
+  await expect(errorOverlay).not.toBeVisible({ timeout: 5000 })
+
   await comfyPage.keyboard.redo()
-  await expect(comfyPage.page.locator('.comfy-missing-nodes')).not.toBeVisible()
+  await expect(errorOverlay).not.toBeVisible({ timeout: 5000 })
 })
 
 test.describe('Execution error', () => {
+  test.beforeEach(async ({ comfyPage }) => {
+    await comfyPage.settings.setSetting('Comfy.UseNewMenu', 'Top')
+    await comfyPage.settings.setSetting(
+      'Comfy.RightSidePanel.ShowErrorsTab',
+      true
+    )
+    await comfyPage.setup()
+  })
+
   test('Should display an error message when an execution error occurs', async ({
     comfyPage
   }) => {
     await comfyPage.workflow.loadWorkflow('nodes/execution_error')
-    await comfyPage.queueButton.click()
+    await comfyPage.command.executeCommand('Comfy.QueuePrompt')
     await comfyPage.nextFrame()
 
-    // Wait for the element with the .comfy-execution-error selector to be visible
-    const executionError = comfyPage.page.locator('.comfy-error-report')
-    await expect(executionError).toBeVisible()
+    // Wait for the error overlay to be visible
+    const errorOverlay = comfyPage.page.getByTestId(
+      TestIds.dialogs.errorOverlay
+    )
+    await expect(errorOverlay).toBeVisible()
   })
 })
 
-test.describe('Missing models warning', () => {
+test.describe('Error actions in Errors Tab', { tag: '@ui' }, () => {
   test.beforeEach(async ({ comfyPage }) => {
+    await comfyPage.settings.setSetting('Comfy.UseNewMenu', 'Top')
     await comfyPage.settings.setSetting(
-      'Comfy.Workflow.ShowMissingModelsWarning',
+      'Comfy.RightSidePanel.ShowErrorsTab',
       true
     )
-    await comfyPage.page.evaluate((url: string) => {
-      return fetch(`${url}/api/devtools/cleanup_fake_model`)
-    }, comfyPage.url)
   })
 
-  test('Should display a warning when missing models are found', async ({
+  test('Should show Find on GitHub and Copy buttons in error card after execution error', async ({
+    comfyPage
+  }) => {
+    await comfyPage.workflow.loadWorkflow('nodes/execution_error')
+    await comfyPage.command.executeCommand('Comfy.QueuePrompt')
+    await comfyPage.nextFrame()
+
+    // Wait for error overlay and click "See Errors"
+    const errorOverlay = comfyPage.page.getByTestId(
+      TestIds.dialogs.errorOverlay
+    )
+    await expect(errorOverlay).toBeVisible()
+    await errorOverlay
+      .getByTestId(TestIds.dialogs.errorOverlaySeeErrors)
+      .click()
+    await expect(errorOverlay).not.toBeVisible()
+
+    // Verify Find on GitHub button is present in the error card
+    const findOnGithubButton = comfyPage.page.getByTestId(
+      TestIds.dialogs.errorCardFindOnGithub
+    )
+    await expect(findOnGithubButton).toBeVisible()
+
+    // Verify Copy button is present in the error card
+    const copyButton = comfyPage.page.getByTestId(TestIds.dialogs.errorCardCopy)
+    await expect(copyButton).toBeVisible()
+  })
+})
+
+test.describe('Missing models in Error Tab', () => {
+  test.beforeEach(async ({ comfyPage }) => {
+    await comfyPage.settings.setSetting('Comfy.UseNewMenu', 'Top')
+    await comfyPage.settings.setSetting(
+      'Comfy.RightSidePanel.ShowErrorsTab',
+      true
+    )
+    const cleanupOk = await comfyPage.page.evaluate(async (url: string) => {
+      const response = await fetch(`${url}/api/devtools/cleanup_fake_model`)
+      return response.ok
+    }, comfyPage.url)
+    expect(cleanupOk).toBeTruthy()
+  })
+
+  test('Should show error overlay with missing models when workflow has missing models', async ({
     comfyPage
   }) => {
     await comfyPage.workflow.loadWorkflow('missing/missing_models')
 
-    const missingModelsWarning = comfyPage.page.locator('.comfy-missing-models')
-    await expect(missingModelsWarning).toBeVisible()
+    const errorOverlay = comfyPage.page.getByTestId(
+      TestIds.dialogs.errorOverlay
+    )
+    await expect(errorOverlay).toBeVisible()
 
-    const downloadButton = missingModelsWarning.getByText('Download')
-    await expect(downloadButton).toBeVisible()
-
-    // Check that the copy URL button is also visible for Desktop environment
-    const copyUrlButton = missingModelsWarning.getByText('Copy URL')
-    await expect(copyUrlButton).toBeVisible()
+    const missingModelsTitle = errorOverlay.getByText(/Missing Models/)
+    await expect(missingModelsTitle).toBeVisible()
   })
 
-  test('Should display a warning when missing models are found in node properties', async ({
+  test('Should show missing models from node properties', async ({
     comfyPage
   }) => {
-    // Load workflow that has a node with models metadata at the node level
     await comfyPage.workflow.loadWorkflow(
       'missing/missing_models_from_node_properties'
     )
 
-    const missingModelsWarning = comfyPage.page.locator('.comfy-missing-models')
-    await expect(missingModelsWarning).toBeVisible()
+    const errorOverlay = comfyPage.page.getByTestId(
+      TestIds.dialogs.errorOverlay
+    )
+    await expect(errorOverlay).toBeVisible()
 
-    const downloadButton = missingModelsWarning.getByText('Download')
-    await expect(downloadButton).toBeVisible()
-
-    // Check that the copy URL button is also visible for Desktop environment
-    const copyUrlButton = missingModelsWarning.getByText('Copy URL')
-    await expect(copyUrlButton).toBeVisible()
+    const missingModelsTitle = errorOverlay.getByText(/Missing Models/)
+    await expect(missingModelsTitle).toBeVisible()
   })
 
-  test('Should not display a warning when no missing models are found', async ({
+  test('Should not show missing models when widget values have changed', async ({
     comfyPage
   }) => {
-    const modelFoldersRes = {
-      status: 200,
-      body: JSON.stringify([
-        {
-          name: 'text_encoders',
-          folders: ['ComfyUI/models/text_encoders']
-        }
-      ])
-    }
-    await comfyPage.page.route(
-      '**/api/experiment/models',
-      (route) => route.fulfill(modelFoldersRes),
-      { times: 1 }
-    )
-
-    // Reload page to trigger indexing of model folders
-    await comfyPage.setup()
-
-    const clipModelsRes = {
-      status: 200,
-      body: JSON.stringify([
-        {
-          name: 'fake_model.safetensors',
-          pathIndex: 0
-        }
-      ])
-    }
-    await comfyPage.page.route(
-      '**/api/experiment/models/text_encoders',
-      (route) => route.fulfill(clipModelsRes),
-      { times: 1 }
-    )
-
-    await comfyPage.workflow.loadWorkflow('missing/missing_models')
-
-    const missingModelsWarning = comfyPage.page.locator('.comfy-missing-models')
-    await expect(missingModelsWarning).not.toBeVisible()
-  })
-
-  test('Should not display warning when model metadata exists but widget values have changed', async ({
-    comfyPage
-  }) => {
-    // This tests the scenario where outdated model metadata exists in the workflow
-    // but the actual selected models (widget values) have changed
     await comfyPage.workflow.loadWorkflow(
       'missing/model_metadata_widget_mismatch'
     )
 
-    // The missing models warning should NOT appear
-    const missingModelsWarning = comfyPage.page.locator('.comfy-missing-models')
-    await expect(missingModelsWarning).not.toBeVisible()
+    await expect(
+      comfyPage.page.getByTestId(TestIds.dialogs.errorOverlay)
+    ).not.toBeVisible()
+    await expect(comfyPage.page.getByText(/Missing Models/)).not.toBeVisible()
   })
 
   // Flaky test after parallelization
@@ -181,63 +248,20 @@ test.describe('Missing models warning', () => {
   test.skip('Should download missing model when clicking download button', async ({
     comfyPage
   }) => {
-    // The fake_model.safetensors is served by
-    // https://github.com/Comfy-Org/ComfyUI_devtools/blob/main/__init__.py
     await comfyPage.workflow.loadWorkflow('missing/missing_models')
 
-    const missingModelsWarning = comfyPage.page.locator('.comfy-missing-models')
-    await expect(missingModelsWarning).toBeVisible()
+    const errorOverlay = comfyPage.page.getByTestId(
+      TestIds.dialogs.errorOverlay
+    )
+    await expect(errorOverlay).toBeVisible()
 
-    const downloadButton = comfyPage.page.getByText('Download')
-    await expect(downloadButton).toBeVisible()
+    const downloadAllButton = comfyPage.page.getByText('Download all')
+    await expect(downloadAllButton).toBeVisible()
     const downloadPromise = comfyPage.page.waitForEvent('download')
-    await downloadButton.click()
+    await downloadAllButton.click()
 
     const download = await downloadPromise
     expect(download.suggestedFilename()).toBe('fake_model.safetensors')
-  })
-
-  test.describe('Do not show again checkbox', () => {
-    let checkbox: Locator
-    let closeButton: Locator
-
-    test.beforeEach(async ({ comfyPage }) => {
-      await comfyPage.settings.setSetting(
-        'Comfy.Workflow.ShowMissingModelsWarning',
-        true
-      )
-      await comfyPage.workflow.loadWorkflow('missing/missing_models')
-
-      checkbox = comfyPage.page.getByLabel("Don't show this again")
-      closeButton = comfyPage.page.getByLabel('Close')
-    })
-
-    test('Should disable warning dialog when checkbox is checked', async ({
-      comfyPage
-    }) => {
-      await checkbox.click()
-      const changeSettingPromise = comfyPage.page.waitForRequest(
-        '**/api/settings/Comfy.Workflow.ShowMissingModelsWarning'
-      )
-      await closeButton.click()
-      await changeSettingPromise
-
-      const settingValue = await comfyPage.settings.getSetting(
-        'Comfy.Workflow.ShowMissingModelsWarning'
-      )
-      expect(settingValue).toBe(false)
-    })
-
-    test('Should keep warning dialog enabled when checkbox is unchecked', async ({
-      comfyPage
-    }) => {
-      await closeButton.click()
-
-      const settingValue = await comfyPage.settings.getSetting(
-        'Comfy.Workflow.ShowMissingModelsWarning'
-      )
-      expect(settingValue).toBe(true)
-    })
   })
 })
 
@@ -300,12 +324,14 @@ test.describe('Settings', () => {
     })
     await newBlankWorkflowRow.click()
 
-    // Click edit button
-    const editKeybindingButton = newBlankWorkflowRow.locator('.pi-pencil')
-    await editKeybindingButton.click()
+    // Click add keybinding button (New Blank Workflow has no default keybinding)
+    const addKeybindingButton = newBlankWorkflowRow.locator(
+      '.icon-\\[lucide--plus\\]'
+    )
+    await addKeybindingButton.click()
 
     // Set new keybinding
-    const input = comfyPage.page.getByPlaceholder('Press keys for new binding')
+    const input = comfyPage.page.getByPlaceholder('Enter your keybind')
     await input.press('Alt+n')
 
     const requestPromise = comfyPage.page.waitForRequest(
@@ -317,7 +343,7 @@ test.describe('Settings', () => {
 
     // Save keybinding
     const saveButton = comfyPage.page
-      .getByLabel('New Blank Workflow')
+      .getByLabel('Modify keybinding')
       .getByText('Save')
     await saveButton.click()
 
@@ -340,17 +366,23 @@ test.describe('Support', () => {
     comfyPage
   }) => {
     await comfyPage.settings.setSetting('Comfy.UseNewMenu', 'Top')
-    const pagePromise = comfyPage.page.context().waitForEvent('page')
+
+    // Prevent loading the external page
+    await comfyPage.page
+      .context()
+      .route('https://support.comfy.org/**', (route) =>
+        route.fulfill({ body: '<html></html>', contentType: 'text/html' })
+      )
+
+    const popupPromise = comfyPage.page.waitForEvent('popup')
     await comfyPage.menu.topbar.triggerTopbarCommand(['Help', 'Support'])
-    const newPage = await pagePromise
+    const popup = await popupPromise
 
-    await newPage.waitForLoadState('networkidle')
-    await expect(newPage).toHaveURL(/.*support\.comfy\.org.*/)
-
-    const url = new URL(newPage.url())
+    const url = new URL(popup.url())
+    expect(url.hostname).toBe('support.comfy.org')
     expect(url.searchParams.get('tf_42243568391700')).toBe('oss')
 
-    await newPage.close()
+    await popup.close()
   })
 })
 
@@ -390,7 +422,7 @@ test.describe('Signin dialog', () => {
   test('Paste content to signin dialog should not paste node on canvas', async ({
     comfyPage
   }) => {
-    const nodeNum = (await comfyPage.nodeOps.getNodes()).length
+    const nodeNum = await comfyPage.nodeOps.getNodeCount()
     await comfyPage.canvas.click({
       position: DefaultGraphPositions.emptyLatentWidgetClick
     })
@@ -413,6 +445,6 @@ test.describe('Signin dialog', () => {
     await input.press('Control+v')
     await expect(input).toHaveValue('test_password')
 
-    expect(await comfyPage.nodeOps.getNodes()).toHaveLength(nodeNum)
+    expect(await comfyPage.nodeOps.getNodeCount()).toBe(nodeNum)
   })
 })

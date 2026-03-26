@@ -1,9 +1,5 @@
 import { test as base } from '@playwright/test'
 
-interface TestWindow extends Window {
-  __ws__?: Record<string, WebSocket>
-}
-
 export const webSocketFixture = base.extend<{
   ws: { trigger(data: unknown, url?: string): Promise<void> }
 }>({
@@ -33,7 +29,8 @@ export const webSocketFixture = base.extend<{
             function ([data, url]) {
               if (!url) {
                 // If no URL specified, use page URL
-                const u = new URL(window.location.toString())
+                const u = new URL(window.location.href)
+                u.hash = ''
                 u.protocol = 'ws:'
                 u.pathname = '/'
                 url = u.toString() + 'ws'

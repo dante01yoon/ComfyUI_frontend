@@ -8,19 +8,22 @@ import Tab from '@/components/tab/Tab.vue'
 import TabList from '@/components/tab/TabList.vue'
 import Button from '@/components/ui/button/Button.vue'
 import { useGraphHierarchy } from '@/composables/graph/useGraphHierarchy'
-import type { ProxyWidgetsProperty } from '@/core/schemas/proxyWidget'
 import { st } from '@/i18n'
+import { app } from '@/scripts/app'
+import { getActiveGraphNodeIds } from '@/utils/graphTraversalUtil'
 import { SubgraphNode } from '@/lib/litegraph/src/litegraph'
 import type { LGraphNode } from '@/lib/litegraph/src/litegraph'
 import { useSettingStore } from '@/platform/settings/settingStore'
 import { useCanvasStore } from '@/renderer/core/canvas/canvasStore'
-import { useExecutionStore } from '@/stores/executionStore'
+import { useMissingModelStore } from '@/platform/missingModel/missingModelStore'
+import { useExecutionErrorStore } from '@/stores/executionErrorStore'
+import { useMissingNodesErrorStore } from '@/platform/nodeReplacement/missingNodesErrorStore'
 import { useRightSidePanelStore } from '@/stores/workspace/rightSidePanelStore'
 import type { RightSidePanelTab } from '@/stores/workspace/rightSidePanelStore'
 import { resolveNodeDisplayName } from '@/utils/nodeTitleUtil'
 import { cn } from '@/utils/tailwindUtil'
+import { isGroupNode } from '@/utils/executableGroupNodeDto'
 
-import TabError from './TabError.vue'
 import TabInfo from './info/TabInfo.vue'
 import TabGlobalParameters from './parameters/TabGlobalParameters.vue'
 import TabNodes from './parameters/TabNodes.vue'
@@ -36,12 +39,25 @@ import SubgraphEditor from './subgraph/SubgraphEditor.vue'
 import TabErrors from './errors/TabErrors.vue'
 
 const canvasStore = useCanvasStore()
-const executionStore = useExecutionStore()
+const executionErrorStore = useExecutionErrorStore()
+const missingModelStore = useMissingModelStore()
+const missingNodesErrorStore = useMissingNodesErrorStore()
 const rightSidePanelStore = useRightSidePanelStore()
 const settingStore = useSettingStore()
 const { t } = useI18n()
 
-const { hasAnyError } = storeToRefs(executionStore)
+const { hasAnyError, allErrorExecutionIds } = storeToRefs(executionErrorStore)
+
+const activeMissingNodeGraphIds = computed<Set<string>>(() => {
+  if (!app.isGraphReady) return new Set()
+  return getActiveGraphNodeIds(
+    app.rootGraph,
+    canvasStore.currentGraph ?? app.rootGraph,
+    missingNodesErrorStore.missingAncestorExecutionIds
+  )
+})
+
+const { activeMissingModelGraphIds } = storeToRefs(missingModelStore)
 
 const { findParentGroup } = useGraphHierarchy()
 
@@ -96,30 +112,52 @@ type RightSidePanelTabList = Array<{
   icon?: string
 }>
 
-//FIXME all errors if nothing selected?
-const selectedNodeErrors = computed(() =>
-  selectedNodes.value
-    .map((node) => executionStore.getNodeErrors(`${node.id}`))
-    .filter((nodeError) => !!nodeError)
+const hasDirectNodeError = computed(() =>
+  selectedNodes.value.some((node) =>
+    executionErrorStore.activeGraphErrorNodeIds.has(String(node.id))
+  )
 )
+
+const hasContainerInternalError = computed(() => {
+  if (allErrorExecutionIds.value.length === 0) return false
+  return selectedNodes.value.some((node) => {
+    if (!(node instanceof SubgraphNode || isGroupNode(node))) return false
+    return executionErrorStore.isContainerWithInternalError(node)
+  })
+})
+
+const hasMissingNodeSelected = computed(
+  () =>
+    hasSelection.value &&
+    selectedNodes.value.some((node) =>
+      activeMissingNodeGraphIds.value.has(String(node.id))
+    )
+)
+
+const hasMissingModelSelected = computed(
+  () =>
+    hasSelection.value &&
+    selectedNodes.value.some((node) =>
+      activeMissingModelGraphIds.value.has(String(node.id))
+    )
+)
+
+const hasRelevantErrors = computed(() => {
+  if (!hasSelection.value) return hasAnyError.value
+  return (
+    hasDirectNodeError.value ||
+    hasContainerInternalError.value ||
+    hasMissingNodeSelected.value ||
+    hasMissingModelSelected.value
+  )
+})
 
 const tabs = computed<RightSidePanelTabList>(() => {
   const list: RightSidePanelTabList = []
-  if (
-    selectedNodeErrors.value.length &&
-    settingStore.get('Comfy.RightSidePanel.ShowErrorsTab')
-  ) {
-    list.push({
-      label: () => t('g.error'),
-      value: 'error',
-      icon: 'icon-[lucide--octagon-alert] bg-node-stroke-error ml-1'
-    })
-  }
 
   if (
-    hasAnyError.value &&
-    !hasSelection.value &&
-    settingStore.get('Comfy.RightSidePanel.ShowErrorsTab')
+    settingStore.get('Comfy.RightSidePanel.ShowErrorsTab') &&
+    hasRelevantErrors.value
   ) {
     list.push({
       label: () => t('rightSidePanel.errors'),
@@ -228,12 +266,6 @@ function handleTitleEdit(newTitle: string) {
 function handleTitleCancel() {
   isEditing.value = false
 }
-
-function handleProxyWidgetsUpdate(value: ProxyWidgetsProperty) {
-  if (!selectedSingleNode.value) return
-  ;(selectedSingleNode.value as SubgraphNode).properties.proxyWidgets = value
-  canvasStore.canvas?.setDirty(true, true)
-}
 </script>
 
 <template>
@@ -243,8 +275,8 @@ function handleProxyWidgetsUpdate(value: ProxyWidgetsProperty) {
   >
     <!-- Panel Header -->
     <section class="pt-1">
-      <div class="flex items-center justify-between pl-4 pr-3">
-        <h3 class="my-3.5 text-sm font-semibold line-clamp-2 cursor-default">
+      <div class="flex items-center justify-between pr-3 pl-4">
+        <h3 class="my-3.5 line-clamp-2 cursor-default text-sm font-semibold">
           <template v-if="allowTitleEdit">
             <EditableText
               :model-value="panelTitle"
@@ -257,7 +289,7 @@ function handleProxyWidgetsUpdate(value: ProxyWidgetsProperty) {
             />
             <i
               v-if="!isEditing"
-              class="icon-[lucide--pencil] size-4 text-muted-foreground ml-2 content-center relative top-[2px] hover:text-base-foreground cursor-pointer shrink-0"
+              class="relative top-[2px] ml-2 icon-[lucide--pencil] size-4 shrink-0 cursor-pointer content-center text-muted-foreground hover:text-base-foreground"
               @click="isEditing = true"
             />
           </template>
@@ -291,7 +323,7 @@ function handleProxyWidgetsUpdate(value: ProxyWidgetsProperty) {
           </Button>
         </div>
       </div>
-      <nav class="px-4 pb-2 pt-1 overflow-x-auto">
+      <nav class="overflow-x-auto px-4 pt-1 pb-2">
         <TabList
           :model-value="activeTab"
           @update:model-value="
@@ -303,11 +335,15 @@ function handleProxyWidgetsUpdate(value: ProxyWidgetsProperty) {
           <Tab
             v-for="tab in tabs"
             :key="tab.value"
-            class="text-sm py-1 px-2 font-inter transition-all active:scale-95"
+            class="px-2 py-1 font-inter text-sm transition-all active:scale-95"
             :value="tab.value"
           >
             {{ tab.label() }}
-            <i v-if="tab.icon" :class="cn(tab.icon, 'size-4')" />
+            <i
+              v-if="tab.icon"
+              aria-hidden="true"
+              :class="cn(tab.icon, 'size-4')"
+            />
           </Tab>
         </TabList>
       </nav>
@@ -315,9 +351,9 @@ function handleProxyWidgetsUpdate(value: ProxyWidgetsProperty) {
 
     <!-- Panel Content -->
     <div class="scrollbar-thin flex-1 overflow-y-auto">
-      <template v-if="!hasSelection">
-        <TabErrors v-if="activeTab === 'errors'" />
-        <TabGlobalParameters v-else-if="activeTab === 'parameters'" />
+      <TabErrors v-if="activeTab === 'errors'" />
+      <template v-else-if="!hasSelection">
+        <TabGlobalParameters v-if="activeTab === 'parameters'" />
         <TabNodes v-else-if="activeTab === 'nodes'" />
         <TabGlobalSettings v-else-if="activeTab === 'settings'" />
       </template>
@@ -326,11 +362,9 @@ function handleProxyWidgetsUpdate(value: ProxyWidgetsProperty) {
         :node="selectedSingleNode"
       />
       <template v-else>
-        <TabError v-if="activeTab === 'error'" :errors="selectedNodeErrors" />
         <TabSubgraphInputs
           v-if="activeTab === 'parameters' && isSingleSubgraphNode"
           :node="selectedSingleNode as SubgraphNode"
-          @update:proxy-widgets="handleProxyWidgetsUpdate"
         />
         <TabNormalInputs
           v-else-if="activeTab === 'parameters'"

@@ -1,5 +1,5 @@
 <template>
-  <BaseModalLayout content-title="" data-testid="settings-dialog" size="md">
+  <BaseModalLayout content-title="" data-testid="settings-dialog" size="sm">
     <template #leftPanelHeaderTitle>
       <i class="icon-[lucide--settings]" />
       <h2 class="text-neutral text-base">{{ $t('g.settings') }}</h2>
@@ -7,18 +7,19 @@
 
     <template #leftPanel>
       <div class="px-3">
-        <SearchBox
+        <SearchInput
           v-model:model-value="searchQuery"
           size="md"
           :placeholder="$t('g.searchSettings') + '...'"
           :debounce-time="128"
+          autofocus
           @search="handleSearch"
         />
       </div>
 
       <nav
         ref="navRef"
-        class="scrollbar-hide flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4"
+        class="flex scrollbar-hide flex-1 flex-col gap-1 overflow-y-auto px-3 py-4"
       >
         <div
           v-for="(group, index) in navGroups"
@@ -41,20 +42,23 @@
       </nav>
     </template>
 
-    <template #header />
+    <template #header>
+      <div
+        v-if="activeCategoryKey === 'keybinding'"
+        id="keybinding-panel-header"
+        class="flex-1"
+      />
+    </template>
+
+    <template #header-right-area>
+      <div
+        v-if="activeCategoryKey === 'keybinding'"
+        id="keybinding-panel-actions"
+      />
+    </template>
 
     <template #content>
-      <template v-if="inSearch">
-        <SettingsPanel :setting-groups="searchResults" />
-      </template>
-      <template v-else-if="activeSettingCategory">
-        <CurrentUserMessage v-if="activeSettingCategory.label === 'Comfy'" />
-        <ColorPaletteMessage
-          v-if="activeSettingCategory.label === 'Appearance'"
-        />
-        <SettingsPanel :setting-groups="sortedGroups(activeSettingCategory)" />
-      </template>
-      <template v-else-if="activePanel">
+      <template v-if="activePanel">
         <Suspense>
           <component :is="activePanel.component" v-bind="activePanel.props" />
           <template #fallback>
@@ -64,6 +68,16 @@
           </template>
         </Suspense>
       </template>
+      <template v-else-if="inSearch">
+        <SettingsPanel :setting-groups="searchResults" />
+      </template>
+      <template v-else-if="activeSettingCategory">
+        <CurrentUserMessage v-if="activeSettingCategory.label === 'Comfy'" />
+        <ColorPaletteMessage
+          v-if="activeSettingCategory.label === 'Appearance'"
+        />
+        <SettingsPanel :setting-groups="sortedGroups(activeSettingCategory)" />
+      </template>
     </template>
   </BaseModalLayout>
 </template>
@@ -71,7 +85,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from 'vue'
 
-import SearchBox from '@/components/common/SearchBox.vue'
+import SearchInput from '@/components/ui/search-input/SearchInput.vue'
 import CurrentUserMessage from '@/components/dialog/content/setting/CurrentUserMessage.vue'
 import BaseModalLayout from '@/components/widget/layout/BaseModalLayout.vue'
 import NavItem from '@/components/widget/nav/NavItem.vue'
@@ -110,6 +124,7 @@ const {
   searchQuery,
   inSearch,
   searchResultsCategories,
+  matchedNavItemKeys,
   handleSearch: handleSearchBase,
   getSearchResults
 } = useSettingSearch()
@@ -119,16 +134,29 @@ const authActions = useFirebaseAuthActions()
 const navRef = ref<HTMLElement | null>(null)
 const activeCategoryKey = ref<string | null>(defaultCategory.value?.key ?? null)
 
-watch(searchResultsCategories, (categories) => {
-  if (!inSearch.value || categories.size === 0) return
-  const firstMatch = navGroups.value
-    .flatMap((g) => g.items)
-    .find((item) => {
-      const node = findCategoryByKey(item.id)
-      return node && categories.has(node.label)
-    })
-  activeCategoryKey.value = firstMatch?.id ?? null
-})
+const searchableNavItems = computed(() =>
+  navGroups.value.flatMap((g) =>
+    g.items.map((item) => ({
+      key: item.id,
+      label: item.label
+    }))
+  )
+)
+
+watch(
+  [searchResultsCategories, matchedNavItemKeys],
+  ([categories, navKeys]) => {
+    if (!inSearch.value || (categories.size === 0 && navKeys.size === 0)) return
+    const firstMatch = navGroups.value
+      .flatMap((g) => g.items)
+      .find((item) => {
+        if (navKeys.has(item.id)) return true
+        const node = findCategoryByKey(item.id)
+        return node && categories.has(node.label)
+      })
+    activeCategoryKey.value = firstMatch?.id ?? null
+  }
+)
 
 const activeSettingCategory = computed<SettingTreeNode | null>(() => {
   if (!activeCategoryKey.value) return null
@@ -163,7 +191,7 @@ function sortedGroups(category: SettingTreeNode): ISettingGroup[] {
 }
 
 function handleSearch(query: string) {
-  handleSearchBase(query.trim())
+  handleSearchBase(query.trim(), searchableNavItems.value)
   if (query) {
     activeCategoryKey.value = null
   } else if (!activeCategoryKey.value) {
@@ -175,12 +203,7 @@ function onNavItemClick(id: string) {
   activeCategoryKey.value = id
 }
 
-const searchResults = computed<ISettingGroup[]>(() => {
-  const category = activeCategoryKey.value
-    ? findCategoryByKey(activeCategoryKey.value)
-    : null
-  return getSearchResults(category)
-})
+const searchResults = computed<ISettingGroup[]>(() => getSearchResults(null))
 
 // Scroll to and highlight the target setting once the correct category renders.
 if (scrollToSettingId) {

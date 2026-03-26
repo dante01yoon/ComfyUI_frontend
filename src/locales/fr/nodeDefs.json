@@ -696,8 +696,7 @@
         "tooltip": "Nombre maximum d'images à générer lorsque sequential_image_generation='auto'. Le nombre total d'images (entrée + générées) ne peut pas dépasser 15."
       },
       "model": {
-        "name": "model",
-        "tooltip": "Nom du modèle"
+        "name": "model"
       },
       "prompt": {
         "name": "prompt",
@@ -1420,6 +1419,41 @@
       }
     }
   },
+  "ComfyMathExpression": {
+    "display_name": "Expression mathématique",
+    "inputs": {
+      "expression": {
+        "name": "expression"
+      },
+      "values": {
+        "name": "valeurs"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      },
+      "1": {
+        "tooltip": null
+      }
+    }
+  },
+  "ComfyNumberConvert": {
+    "display_name": "Conversion de nombre",
+    "inputs": {
+      "value": {
+        "name": "valeur"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      },
+      "1": {
+        "tooltip": null
+      }
+    }
+  },
   "ComfySwitchNode": {
     "display_name": "Commutateur",
     "inputs": {
@@ -1674,9 +1708,11 @@
     },
     "outputs": {
       "0": {
+        "name": "positif",
         "tooltip": null
       },
       "1": {
+        "name": "négatif",
         "tooltip": null
       }
     }
@@ -1716,6 +1752,10 @@
         "name": "boucle_fermée",
         "tooltip": "Indique s'il faut fermer la boucle de la fenêtre de contexte ; applicable uniquement aux planifications en boucle."
       },
+      "cond_retain_index_list": {
+        "name": "cond_retain_index_list",
+        "tooltip": "Liste des indices latents à conserver dans les tenseurs de conditionnement pour chaque fenêtre ; par exemple, définir cette valeur à '0' utilisera l'image de départ initiale pour chaque fenêtre."
+      },
       "context_length": {
         "name": "longueur_contexte",
         "tooltip": "La longueur de la fenêtre de contexte."
@@ -1747,6 +1787,10 @@
       "model": {
         "name": "modèle",
         "tooltip": "Le modèle auquel appliquer les fenêtres de contexte pendant l'échantillonnage."
+      },
+      "split_conds_to_windows": {
+        "name": "split_conds_to_windows",
+        "tooltip": "Indique s'il faut répartir plusieurs conditionnements (créés par ConditionCombine) dans chaque fenêtre selon l'index de région."
       }
     },
     "outputs": {
@@ -2136,6 +2180,35 @@
       }
     }
   },
+  "CropByBBoxes": {
+    "description": "Rogner et redimensionner des régions du lot d’images d’entrée selon les boîtes englobantes fournies.",
+    "display_name": "CropByBBoxes",
+    "inputs": {
+      "bboxes": {
+        "name": "bboxes"
+      },
+      "image": {
+        "name": "image"
+      },
+      "output_height": {
+        "name": "output_height",
+        "tooltip": "Hauteur à laquelle chaque découpe est redimensionnée."
+      },
+      "output_width": {
+        "name": "output_width",
+        "tooltip": "Largeur à laquelle chaque découpe est redimensionnée."
+      },
+      "padding": {
+        "name": "padding",
+        "tooltip": "Marge supplémentaire en pixels ajoutée de chaque côté de la boîte avant le rognage."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": "Toutes les découpes empilées dans un seul lot d’images."
+      }
+    }
+  },
   "CropMask": {
     "display_name": "CropMask",
     "inputs": {
@@ -2161,6 +2234,23 @@
       }
     }
   },
+  "CurveEditor": {
+    "display_name": "Éditeur de courbe",
+    "inputs": {
+      "curve": {
+        "name": "courbe"
+      },
+      "histogram": {
+        "name": "histogramme"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "courbe",
+        "tooltip": null
+      }
+    }
+  },
   "CustomCombo": {
     "display_name": "Combo personnalisé",
     "inputs": {
@@ -2171,6 +2261,9 @@
       "option1": {}
     },
     "outputs": {
+      "0": {
+        "tooltip": null
+      },
       "1": {
         "name": "INDEX",
         "tooltip": null
@@ -2297,6 +2390,304 @@
     "outputs": {
       "0": {
         "tooltip": "Le modèle avec EasyCache."
+      }
+    }
+  },
+  "ElevenLabsAudioIsolation": {
+    "description": "Supprimez le bruit de fond de l'audio, en isolant les voix ou la parole.",
+    "display_name": "ElevenLabs Isolation de Voix",
+    "inputs": {
+      "audio": {
+        "name": "audio",
+        "tooltip": "Audio à traiter pour la suppression du bruit de fond."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsInstantVoiceClone": {
+    "description": "Créez une voix clonée à partir d'échantillons audio. Fournissez 1 à 8 enregistrements audio de la voix à cloner.",
+    "display_name": "ElevenLabs Clonage Instantané de Voix",
+    "inputs": {
+      "files": {
+        "name": "fichiers",
+        "tooltip": "Enregistrements audio pour le clonage de voix."
+      },
+      "remove_background_noise": {
+        "name": "supprimer_bruit_de_fond",
+        "tooltip": "Supprimez le bruit de fond des échantillons de voix à l'aide de l'isolation audio."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "voix",
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsSpeechToSpeech": {
+    "description": "Transformez la parole d'une voix à une autre tout en préservant le contenu et l'émotion d'origine.",
+    "display_name": "ElevenLabs Conversion de Voix à Voix",
+    "inputs": {
+      "audio": {
+        "name": "audio",
+        "tooltip": "Audio source à transformer."
+      },
+      "control_after_generate": {
+        "name": "contrôle après génération"
+      },
+      "model": {
+        "name": "modèle",
+        "tooltip": "Modèle à utiliser pour la transformation voix-à-voix."
+      },
+      "model_similarity_boost": {
+        "name": "augmentation_similarité"
+      },
+      "model_speed": {
+        "name": "vitesse"
+      },
+      "model_style": {
+        "name": "style"
+      },
+      "model_use_speaker_boost": {
+        "name": "utiliser_augmentation_parleur"
+      },
+      "output_format": {
+        "name": "format_de_sortie",
+        "tooltip": "Format de sortie audio."
+      },
+      "remove_background_noise": {
+        "name": "supprimer_bruit_de_fond",
+        "tooltip": "Supprimez le bruit de fond de l'audio d'entrée à l'aide de l'isolation audio."
+      },
+      "seed": {
+        "name": "graine",
+        "tooltip": "Graine pour la reproductibilité."
+      },
+      "stability": {
+        "name": "stabilité",
+        "tooltip": "Stabilité de la voix. Des valeurs plus faibles donnent une gamme émotionnelle plus large, des valeurs plus élevées produisent une parole plus cohérente mais potentiellement monotone."
+      },
+      "voice": {
+        "name": "voix",
+        "tooltip": "Voix cible pour la transformation. Connectez depuis le Sélecteur de Voix ou le Clonage Instantané de Voix."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsSpeechToText": {
+    "description": "Transcrivez l’audio en texte. Prend en charge la détection automatique de la langue, la diarisation des locuteurs et l’étiquetage des événements audio.",
+    "display_name": "ElevenLabs Speech to Text",
+    "inputs": {
+      "audio": {
+        "name": "audio",
+        "tooltip": "Audio à transcrire."
+      },
+      "control_after_generate": {
+        "name": "control after generate"
+      },
+      "language_code": {
+        "name": "language_code",
+        "tooltip": "Code de langue ISO-639-1 ou ISO-639-3 (ex. : 'en', 'es', 'fra'). Laisser vide pour une détection automatique."
+      },
+      "model": {
+        "name": "model",
+        "tooltip": "Modèle à utiliser pour la transcription."
+      },
+      "model_diarization_threshold": {
+        "name": "diarization_threshold"
+      },
+      "model_diarize": {
+        "name": "diarize"
+      },
+      "model_tag_audio_events": {
+        "name": "tag_audio_events"
+      },
+      "model_temperature": {
+        "name": "temperature"
+      },
+      "model_timestamps_granularity": {
+        "name": "timestamps_granularity"
+      },
+      "num_speakers": {
+        "name": "num_speakers",
+        "tooltip": "Nombre maximal de locuteurs à prédire. Mettre à 0 pour une détection automatique."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Graine pour la reproductibilité (déterminisme non garanti)."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "text",
+        "tooltip": null
+      },
+      "1": {
+        "name": "language_code",
+        "tooltip": null
+      },
+      "2": {
+        "name": "words_json",
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsTextToDialogue": {
+    "description": "Générez un dialogue multi-locuteurs à partir d’un texte. Chaque entrée de dialogue possède son propre texte et sa propre voix.",
+    "display_name": "ElevenLabs Text to Dialogue",
+    "inputs": {
+      "apply_text_normalization": {
+        "name": "apply_text_normalization",
+        "tooltip": "Mode de normalisation du texte. 'auto' laisse le système décider, 'on' applique toujours la normalisation, 'off' la désactive."
+      },
+      "control_after_generate": {
+        "name": "control after generate"
+      },
+      "inputs": {
+        "name": "inputs",
+        "tooltip": "Nombre d’entrées de dialogue."
+      },
+      "inputs_text1": {
+        "name": "text1"
+      },
+      "language_code": {
+        "name": "language_code",
+        "tooltip": "Code de langue ISO-639-1 ou ISO-639-3 (ex. : 'en', 'es', 'fra'). Laisser vide pour une détection automatique."
+      },
+      "model": {
+        "name": "model",
+        "tooltip": "Modèle à utiliser pour la génération du dialogue."
+      },
+      "output_format": {
+        "name": "output_format",
+        "tooltip": "Format de sortie audio."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Graine pour la reproductibilité."
+      },
+      "stability": {
+        "name": "stability",
+        "tooltip": "Stabilité de la voix. Des valeurs plus faibles donnent une gamme émotionnelle plus large, des valeurs plus élevées produisent une voix plus cohérente mais potentiellement monotone."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsTextToSoundEffects": {
+    "description": "Générez des effets sonores à partir de descriptions textuelles.",
+    "display_name": "ElevenLabs Text to Sound Effects",
+    "inputs": {
+      "model": {
+        "name": "model",
+        "tooltip": "Modèle à utiliser pour la génération de l’effet sonore."
+      },
+      "model_duration": {
+        "name": "duration"
+      },
+      "model_loop": {
+        "name": "loop"
+      },
+      "model_prompt_influence": {
+        "name": "prompt_influence"
+      },
+      "output_format": {
+        "name": "output_format",
+        "tooltip": "Format de sortie audio."
+      },
+      "text": {
+        "name": "text",
+        "tooltip": "Description textuelle de l’effet sonore à générer."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsTextToSpeech": {
+    "description": "Convertir du texte en parole.",
+    "display_name": "ElevenLabs Text to Speech",
+    "inputs": {
+      "apply_text_normalization": {
+        "name": "appliquer la normalisation du texte",
+        "tooltip": "Mode de normalisation du texte. 'auto' laisse le système décider, 'on' applique toujours la normalisation, 'off' la désactive."
+      },
+      "control_after_generate": {
+        "name": "contrôle après génération"
+      },
+      "language_code": {
+        "name": "code langue",
+        "tooltip": "Code langue ISO-639-1 ou ISO-639-3 (ex : 'en', 'es', 'fra'). Laisser vide pour une détection automatique."
+      },
+      "model": {
+        "name": "modèle",
+        "tooltip": "Modèle à utiliser pour la synthèse texte-parole."
+      },
+      "model_similarity_boost": {
+        "name": "augmentation de similarité"
+      },
+      "model_speed": {
+        "name": "vitesse"
+      },
+      "model_style": {
+        "name": "style"
+      },
+      "model_use_speaker_boost": {
+        "name": "utiliser le speaker boost"
+      },
+      "output_format": {
+        "name": "format de sortie",
+        "tooltip": "Format de sortie audio."
+      },
+      "seed": {
+        "name": "graine",
+        "tooltip": "Graine pour la reproductibilité (déterminisme non garanti)."
+      },
+      "stability": {
+        "name": "stabilité",
+        "tooltip": "Stabilité de la voix. Des valeurs plus faibles offrent une gamme émotionnelle plus large, des valeurs plus élevées produisent une voix plus cohérente mais potentiellement monotone."
+      },
+      "text": {
+        "name": "texte",
+        "tooltip": "Le texte à convertir en parole."
+      },
+      "voice": {
+        "name": "voix",
+        "tooltip": "Voix à utiliser pour la synthèse vocale. Connectez depuis Voice Selector ou Instant Voice Clone."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsVoiceSelector": {
+    "description": "Sélectionnez une voix prédéfinie ElevenLabs pour la génération texte-parole.",
+    "display_name": "Sélecteur de voix ElevenLabs",
+    "inputs": {
+      "voice": {
+        "name": "voix",
+        "tooltip": "Choisissez une voix parmi les voix prédéfinies ElevenLabs."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "voix",
+        "tooltip": null
       }
     }
   },
@@ -2857,6 +3248,21 @@
       }
     }
   },
+  "FluxKVCache": {
+    "description": "Active l’optimisation KV Cache pour les images de référence sur les modèles de la famille Flux.",
+    "display_name": "Flux KV Cache",
+    "inputs": {
+      "model": {
+        "name": "modèle",
+        "tooltip": "Le modèle sur lequel activer le KV Cache."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": "Le modèle modifié avec le KV Cache activé."
+      }
+    }
+  },
   "FluxKontextImageScale": {
     "description": "Ce nœud redimensionne l'image pour une optimisation avec flux kontext.",
     "display_name": "Échelle d'image FluxKontext",
@@ -3235,6 +3641,50 @@
       }
     }
   },
+  "GLSLShader": {
+    "description": "Appliquez des shaders de fragments GLSL ES aux images. u_resolution (vec2) est toujours disponible.",
+    "display_name": "Shader GLSL",
+    "inputs": {
+      "floats": {
+        "name": "floats",
+        "tooltip": "Les flottants sont disponibles sous u_float0-4 dans le code du shader"
+      },
+      "fragment_shader": {
+        "name": "fragment_shader",
+        "tooltip": "Code source du shader de fragment GLSL (compatible GLSL ES 3.00 / WebGL 2.0)"
+      },
+      "images": {
+        "name": "images",
+        "tooltip": "Les images sont disponibles sous u_image0-4 (sampler2D) dans le code du shader"
+      },
+      "ints": {
+        "name": "ints",
+        "tooltip": "Les entiers sont disponibles sous u_int0-4 dans le code du shader"
+      },
+      "size_mode": {
+        "name": "size_mode",
+        "tooltip": "Taille de sortie : 'from_input' utilise les dimensions de la première image d'entrée, 'custom' permet de définir la taille manuellement"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "IMAGE0",
+        "tooltip": "Disponible via layout(location = 0) out vec4 fragColor0 dans le code du shader"
+      },
+      "1": {
+        "name": "IMAGE1",
+        "tooltip": "Disponible via layout(location = 1) out vec4 fragColor1 dans le code du shader"
+      },
+      "2": {
+        "name": "IMAGE2",
+        "tooltip": "Disponible via layout(location = 2) out vec4 fragColor2 dans le code du shader"
+      },
+      "3": {
+        "name": "IMAGE3",
+        "tooltip": "Disponible via layout(location = 3) out vec4 fragColor3 dans le code du shader"
+      }
+    }
+  },
   "GeminiImage2Node": {
     "description": "Générez ou modifiez des images de manière synchrone via l'API Google Vertex.",
     "display_name": "Nano Banana Pro (Google Gemini Image)",
@@ -3352,6 +3802,64 @@
     "outputs": {
       "0": {
         "tooltip": null
+      }
+    }
+  },
+  "GeminiNanoBanana2": {
+    "description": "Générez ou modifiez des images de manière synchrone via l’API Google Vertex.",
+    "display_name": "Nano Banana 2",
+    "inputs": {
+      "aspect_ratio": {
+        "name": "rapport d’aspect",
+        "tooltip": "Si défini sur « auto », correspond au rapport d’aspect de votre image d’entrée ; si aucune image n’est fournie, un carré 16:9 est généralement généré."
+      },
+      "control_after_generate": {
+        "name": "contrôle après génération"
+      },
+      "files": {
+        "name": "fichiers",
+        "tooltip": "Fichier(s) optionnel(s) à utiliser comme contexte pour le modèle. Accepte les entrées du nœud Gemini Generate Content Input Files."
+      },
+      "images": {
+        "name": "images",
+        "tooltip": "Image(s) de référence optionnelle(s). Pour inclure plusieurs images, utilisez le nœud Batch Images (jusqu’à 14)."
+      },
+      "model": {
+        "name": "modèle"
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "Invite textuelle décrivant l’image à générer ou les modifications à appliquer. Incluez toutes contraintes, styles ou détails que le modèle doit respecter."
+      },
+      "resolution": {
+        "name": "résolution",
+        "tooltip": "Résolution de sortie cible. Pour le 2K/4K, l’upscaler natif Gemini est utilisé."
+      },
+      "response_modalities": {
+        "name": "modalités de réponse"
+      },
+      "seed": {
+        "name": "graine",
+        "tooltip": "Lorsque la graine est fixée à une valeur spécifique, le modèle s’efforce de fournir la même réponse pour des requêtes répétées. Un résultat déterministe n’est pas garanti. De plus, changer le modèle ou les paramètres, comme la température, peut entraîner des variations de la réponse même avec la même valeur de graine. Par défaut, une graine aléatoire est utilisée."
+      },
+      "system_prompt": {
+        "name": "invite système",
+        "tooltip": "Instructions fondamentales qui dictent le comportement de l’IA."
+      },
+      "thinking_level": {
+        "name": "niveau de réflexion"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      },
+      "1": {
+        "tooltip": null
+      },
+      "2": {
+        "name": "thought_image",
+        "tooltip": "Première image issue du processus de réflexion du modèle. Disponible uniquement avec le niveau de réflexion ÉLEVÉ et la modalité IMAGE+TEXTE."
       }
     }
   },
@@ -3477,12 +3985,15 @@
     },
     "outputs": {
       "0": {
+        "name": "largeur",
         "tooltip": null
       },
       "1": {
+        "name": "hauteur",
         "tooltip": null
       },
       "2": {
+        "name": "taille du lot",
         "tooltip": null
       }
     }
@@ -3515,6 +4026,10 @@
     "description": "Modifiez une image existante à partir d'une invite textuelle",
     "display_name": "Grok Image Edit",
     "inputs": {
+      "aspect_ratio": {
+        "name": "rapport d'aspect",
+        "tooltip": "Autorisé uniquement lorsque plusieurs images sont connectées à l'entrée image."
+      },
       "control_after_generate": {
         "name": "contrôle après génération"
       },
@@ -3567,6 +4082,9 @@
         "name": "invite",
         "tooltip": "L'invite textuelle utilisée pour générer l'image"
       },
+      "resolution": {
+        "name": "résolution"
+      },
       "seed": {
         "name": "graine",
         "tooltip": "Graine pour déterminer si le nœud doit être relancé ; les résultats réels sont non déterministes, quelle que soit la graine."
@@ -3607,6 +4125,39 @@
       }
     }
   },
+  "GrokVideoExtendNode": {
+    "description": "Prolongez une vidéo existante avec une continuation fluide basée sur une invite textuelle.",
+    "display_name": "Extension vidéo Grok",
+    "inputs": {
+      "control_after_generate": {
+        "name": "contrôle après génération"
+      },
+      "model": {
+        "name": "modèle",
+        "tooltip": "Le modèle à utiliser pour l’extension vidéo."
+      },
+      "model_duration": {
+        "name": "durée"
+      },
+      "prompt": {
+        "name": "invite",
+        "tooltip": "Description textuelle de ce qui doit se passer ensuite dans la vidéo."
+      },
+      "seed": {
+        "name": "graine",
+        "tooltip": "Graine pour déterminer si le nœud doit être relancé ; les résultats réels sont non déterministes quel que soit la graine."
+      },
+      "video": {
+        "name": "vidéo",
+        "tooltip": "Vidéo source à prolonger. Format MP4, 2-15 secondes."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
   "GrokVideoNode": {
     "description": "Générez une vidéo à partir d'une invite ou d'une image",
     "display_name": "Grok Video",
@@ -3639,6 +4190,41 @@
       "seed": {
         "name": "graine",
         "tooltip": "Graine pour déterminer si le nœud doit être relancé ; les résultats réels sont non déterministes, quelle que soit la graine."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "GrokVideoReferenceNode": {
+    "description": "Générez une vidéo guidée par des images de référence comme références de style et de contenu.",
+    "display_name": "Grok Référence-vers-Vidéo",
+    "inputs": {
+      "control_after_generate": {
+        "name": "contrôle après génération"
+      },
+      "model": {
+        "name": "modèle",
+        "tooltip": "Le modèle à utiliser pour la génération vidéo."
+      },
+      "model_aspect_ratio": {
+        "name": "ratio d’aspect"
+      },
+      "model_duration": {
+        "name": "durée"
+      },
+      "model_resolution": {
+        "name": "résolution"
+      },
+      "prompt": {
+        "name": "invite",
+        "tooltip": "Description textuelle de la vidéo souhaitée."
+      },
+      "seed": {
+        "name": "graine",
+        "tooltip": "Graine pour déterminer si le nœud doit être relancé ; les résultats réels sont non déterministes quel que soit la graine."
       }
     },
     "outputs": {
@@ -3719,9 +4305,11 @@
     },
     "outputs": {
       "0": {
+        "name": "positive",
         "tooltip": null
       },
       "1": {
+        "name": "negative",
         "tooltip": null
       }
     }
@@ -3744,9 +4332,11 @@
     },
     "outputs": {
       "0": {
+        "name": "positive",
         "tooltip": null
       },
       "1": {
+        "name": "negative",
         "tooltip": null
       }
     }
@@ -4395,6 +4985,28 @@
       }
     }
   },
+  "ImageMergeTileList": {
+    "display_name": "Fusionner une liste de tuiles en image",
+    "inputs": {
+      "final_height": {
+        "name": "hauteur_finale"
+      },
+      "final_width": {
+        "name": "largeur_finale"
+      },
+      "image_list": {
+        "name": "liste_d'images"
+      },
+      "overlap": {
+        "name": "chevauchement"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
   "ImageOnlyCheckpointLoader": {
     "display_name": "Chargeur de points de contrôle uniquement pour image (modèle img2vid)",
     "inputs": {
@@ -4973,6 +5585,39 @@
       }
     }
   },
+  "KlingAvatarNode": {
+    "description": "Générez des vidéos de type diffusion de personnages numériques à partir d'une seule photo et d'un fichier audio.",
+    "display_name": "Kling Avatar 2.0",
+    "inputs": {
+      "control_after_generate": {
+        "name": "contrôle après génération"
+      },
+      "image": {
+        "name": "image",
+        "tooltip": "Image de référence de l'avatar. La largeur et la hauteur doivent être d'au moins 300 px. Le rapport d'aspect doit être compris entre 1:2,5 et 2,5:1."
+      },
+      "mode": {
+        "name": "mode"
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "Invite optionnelle pour définir les actions, émotions et mouvements de caméra de l'avatar."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Le seed contrôle si le nœud doit être relancé ; les résultats restent non déterministes quel que soit le seed."
+      },
+      "sound_file": {
+        "name": "sound_file",
+        "tooltip": "Entrée audio. Doit durer entre 2 et 300 secondes."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
   "KlingCameraControlI2VNode": {
     "description": "Transformez des images fixes en vidéos cinématographiques avec des mouvements de caméra professionnels qui simulent la cinématographie réelle. Contrôlez les actions de la caméra virtuelle, y compris le zoom, la rotation, le panoramique, l'inclinaison et la vue à la première personne, tout en maintenant la mise au point sur votre image d'origine.",
     "display_name": "Kling Image to Video (Contrôle de la caméra)",
@@ -5362,6 +6007,9 @@
       },
       "mode": {
         "name": "mode"
+      },
+      "model": {
+        "name": "modèle"
       },
       "prompt": {
         "name": "invite"
@@ -6201,6 +6849,54 @@
       }
     }
   },
+  "LTXVReferenceAudio": {
+    "description": "Définir un audio de référence pour le transfert d'identité de locuteur ID-LoRA. Encode un clip audio de référence dans le conditionnement et, en option, applique un guidage d'identité au modèle (passe supplémentaire sans référence, amplifiant l'effet d'identité du locuteur).",
+    "display_name": "LTXV Reference Audio (ID-LoRA)",
+    "inputs": {
+      "audio_vae": {
+        "name": "audio_vae",
+        "tooltip": "LTXV Audio VAE pour l'encodage."
+      },
+      "end_percent": {
+        "name": "pourcentage_fin",
+        "tooltip": "Fin de la plage sigma où le guidage d'identité est actif."
+      },
+      "identity_guidance_scale": {
+        "name": "échelle_guidage_identité",
+        "tooltip": "Intensité du guidage d'identité. Effectue une passe supplémentaire sans référence à chaque étape pour amplifier l'identité du locuteur. Mettre à 0 pour désactiver (pas de passe supplémentaire)."
+      },
+      "model": {
+        "name": "modèle"
+      },
+      "negative": {
+        "name": "négatif"
+      },
+      "positive": {
+        "name": "positif"
+      },
+      "reference_audio": {
+        "name": "audio_de_référence",
+        "tooltip": "Clip audio de référence dont l'identité du locuteur sera transférée. ~5 secondes recommandées (durée d'entraînement). Des clips plus courts ou plus longs peuvent dégrader le transfert d'identité vocale."
+      },
+      "start_percent": {
+        "name": "pourcentage_début",
+        "tooltip": "Début de la plage sigma où le guidage d'identité est actif."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      },
+      "1": {
+        "name": "positif",
+        "tooltip": null
+      },
+      "2": {
+        "name": "négatif",
+        "tooltip": null
+      }
+    }
+  },
   "LTXVScheduler": {
     "display_name": "LTXVScheduler",
     "inputs": {
@@ -6715,21 +7411,31 @@
     },
     "outputs": {
       "0": {
+        "name": "image",
         "tooltip": null
       },
       "1": {
+        "name": "mask",
         "tooltip": null
       },
       "2": {
+        "name": "mesh_path",
         "tooltip": null
       },
       "3": {
+        "name": "normal",
         "tooltip": null
       },
       "4": {
+        "name": "camera_info",
         "tooltip": null
       },
       "5": {
+        "name": "recording_video",
+        "tooltip": null
+      },
+      "6": {
+        "name": "model_3d",
         "tooltip": null
       }
     }
@@ -6999,7 +7705,8 @@
     },
     "outputs": {
       "0": {
-        "name": "model"
+        "name": "model",
+        "tooltip": "Le modèle de diffusion modifié."
       }
     }
   },
@@ -7679,6 +8386,10 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "model_file",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
@@ -7734,6 +8445,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "model_file",
+        "tooltip": null
+      },
+      "1": {
+        "name": "meshy_task_id",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -7789,6 +8508,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "model_file",
+        "tooltip": null
+      },
+      "1": {
+        "name": "meshy_task_id",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -7823,6 +8550,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "model_file",
+        "tooltip": null
+      },
+      "1": {
+        "name": "meshy_task_id",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -7850,6 +8585,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "model_file",
+        "tooltip": null
+      },
+      "1": {
+        "name": "rig_task_id",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -7898,6 +8641,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "fichier_modèle",
+        "tooltip": null
+      },
+      "1": {
+        "name": "meshy_task_id",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -7934,6 +8685,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "fichier_modèle",
+        "tooltip": null
+      },
+      "1": {
+        "name": "meshy_task_id",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -10708,6 +11467,35 @@
       }
     }
   },
+  "Painter": {
+    "display_name": "Peintre",
+    "inputs": {
+      "bg_color": {
+        "name": "couleur de fond"
+      },
+      "height": {
+        "name": "hauteur"
+      },
+      "image": {
+        "name": "image",
+        "tooltip": "Image de base optionnelle sur laquelle peindre"
+      },
+      "mask": {
+        "name": "mask"
+      },
+      "width": {
+        "name": "largeur"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      },
+      "1": {
+        "tooltip": null
+      }
+    }
+  },
   "PairConditioningCombine": {
     "display_name": "Cond Pair Combiner",
     "inputs": {
@@ -11314,6 +12102,91 @@
       },
       "clip_name4": {
         "name": "clip_name4"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "QuiverImageToSVGNode": {
+    "description": "Vectorisez une image matricielle en SVG à l'aide de Quiver AI.",
+    "display_name": "Quiver Image vers SVG",
+    "inputs": {
+      "auto_crop": {
+        "name": "auto_crop",
+        "tooltip": "Rogner automatiquement sur le sujet principal."
+      },
+      "control_after_generate": {
+        "name": "control after generate"
+      },
+      "image": {
+        "name": "image",
+        "tooltip": "Image d'entrée à vectoriser."
+      },
+      "model": {
+        "name": "model",
+        "tooltip": "Modèle à utiliser pour la vectorisation SVG."
+      },
+      "model_presence_penalty": {
+        "name": "presence_penalty"
+      },
+      "model_target_size": {
+        "name": "target_size"
+      },
+      "model_temperature": {
+        "name": "temperature"
+      },
+      "model_top_p": {
+        "name": "top_p"
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Graine pour déterminer si le nœud doit être relancé ; les résultats réels restent non déterministes quel que soit le seed."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "QuiverTextToSVGNode": {
+    "description": "Générez un SVG à partir d'une invite textuelle avec Quiver AI.",
+    "display_name": "Quiver Texte vers SVG",
+    "inputs": {
+      "control_after_generate": {
+        "name": "control after generate"
+      },
+      "instructions": {
+        "name": "instructions",
+        "tooltip": "Conseils supplémentaires de style ou de mise en forme."
+      },
+      "model": {
+        "name": "model",
+        "tooltip": "Modèle à utiliser pour la génération du SVG."
+      },
+      "model_presence_penalty": {
+        "name": "presence_penalty"
+      },
+      "model_temperature": {
+        "name": "temperature"
+      },
+      "model_top_p": {
+        "name": "top_p"
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "Description textuelle du SVG souhaité."
+      },
+      "reference_images": {
+        "name": "reference_images",
+        "tooltip": "Jusqu'à 4 images de référence pour guider la génération."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Graine pour déterminer si le nœud doit être relancé ; les résultats réels restent non déterministes quel que soit le seed."
       }
     },
     "outputs": {
@@ -12248,6 +13121,157 @@
       }
     }
   },
+  "ResolutionSelector": {
+    "description": "Calcule la largeur et la hauteur à partir du ratio d'aspect et de la cible en mégapixels. Utile pour définir les dimensions d'une image latente vide.",
+    "display_name": "Sélecteur de résolution",
+    "inputs": {
+      "aspect_ratio": {
+        "name": "ratio d'aspect",
+        "tooltip": "Le ratio d'aspect pour les dimensions de sortie."
+      },
+      "megapixels": {
+        "name": "mégapixels",
+        "tooltip": "Nombre total de mégapixels visé. 1,0 MP ≈ 1024×1024 pour un carré."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "largeur",
+        "tooltip": "Largeur calculée en pixels (multiple de 8)."
+      },
+      "1": {
+        "name": "hauteur",
+        "tooltip": "Hauteur calculée en pixels (multiple de 8)."
+      }
+    }
+  },
+  "ReveImageCreateNode": {
+    "description": "Générez des images à partir de descriptions textuelles avec Reve.",
+    "display_name": "Reve Création d’Image",
+    "inputs": {
+      "control_after_generate": {
+        "name": "contrôle après génération"
+      },
+      "model": {
+        "name": "modèle",
+        "tooltip": "Version du modèle à utiliser pour la génération."
+      },
+      "model_aspect_ratio": {
+        "name": "rapport d’aspect"
+      },
+      "model_test_time_scaling": {
+        "name": "mise à l’échelle à l’exécution"
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "Description textuelle de l’image souhaitée. Maximum 2560 caractères."
+      },
+      "remove_background": {
+        "name": "supprimer l’arrière-plan",
+        "tooltip": "Supprimer l’arrière-plan de l’image générée. Peut entraîner un coût supplémentaire."
+      },
+      "seed": {
+        "name": "graine",
+        "tooltip": "La graine contrôle si le nœud doit être relancé ; les résultats restent non déterministes quel que soit la graine."
+      },
+      "upscale": {
+        "name": "agrandir",
+        "tooltip": "Agrandir l’image générée. Peut entraîner un coût supplémentaire."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ReveImageEditNode": {
+    "description": "Modifiez des images à l’aide d’instructions en langage naturel avec Reve.",
+    "display_name": "Reve Édition d’Image",
+    "inputs": {
+      "control_after_generate": {
+        "name": "contrôle après génération"
+      },
+      "edit_instruction": {
+        "name": "instruction d’édition",
+        "tooltip": "Description textuelle de la modification à apporter à l’image. Maximum 2560 caractères."
+      },
+      "image": {
+        "name": "image",
+        "tooltip": "L’image à modifier."
+      },
+      "model": {
+        "name": "modèle",
+        "tooltip": "Version du modèle à utiliser pour l’édition."
+      },
+      "model_aspect_ratio": {
+        "name": "rapport d’aspect"
+      },
+      "model_test_time_scaling": {
+        "name": "mise à l’échelle à l’exécution"
+      },
+      "remove_background": {
+        "name": "supprimer l’arrière-plan",
+        "tooltip": "Supprimer l’arrière-plan de l’image générée. Peut entraîner un coût supplémentaire."
+      },
+      "seed": {
+        "name": "graine",
+        "tooltip": "La graine contrôle si le nœud doit être relancé ; les résultats restent non déterministes quel que soit la graine."
+      },
+      "upscale": {
+        "name": "agrandir",
+        "tooltip": "Agrandir l’image générée. Peut entraîner un coût supplémentaire."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ReveImageRemixNode": {
+    "description": "Combinez des images de référence avec des prompts textuels pour créer de nouvelles images avec Reve.",
+    "display_name": "Reve Remix d’Image",
+    "inputs": {
+      "control_after_generate": {
+        "name": "contrôle après génération"
+      },
+      "model": {
+        "name": "modèle",
+        "tooltip": "Version du modèle à utiliser pour le remix."
+      },
+      "model_aspect_ratio": {
+        "name": "rapport d’aspect"
+      },
+      "model_test_time_scaling": {
+        "name": "mise à l’échelle à l’exécution"
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "Description textuelle de l’image souhaitée. Peut inclure des balises XML img pour référencer des images spécifiques par index, par exemple <img>0</img>, <img>1</img>, etc."
+      },
+      "reference_images": {
+        "name": "images de référence"
+      },
+      "remove_background": {
+        "name": "supprimer l’arrière-plan",
+        "tooltip": "Supprimer l’arrière-plan de l’image générée. Peut entraîner un coût supplémentaire."
+      },
+      "seed": {
+        "name": "graine",
+        "tooltip": "La graine contrôle si le nœud doit être relancé ; les résultats restent non déterministes quel que soit la graine."
+      },
+      "upscale": {
+        "name": "agrandir",
+        "tooltip": "Agrandir l’image générée. Peut entraîner un coût supplémentaire."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
   "Rodin3D_Detail": {
     "description": "Générer des actifs 3D en utilisant l'API Rodin",
     "display_name": "Rodin 3D Générer - Générer Détails",
@@ -12266,6 +13290,10 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "Chemin du modèle 3D",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
@@ -12293,6 +13321,10 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "Chemin du modèle 3D",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
@@ -12317,6 +13349,10 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "Chemin du modèle 3D",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
@@ -12335,6 +13371,10 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "Chemin du modèle 3D",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
@@ -12359,6 +13399,10 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "Chemin du modèle 3D",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
@@ -12484,6 +13528,90 @@
     "outputs": {
       "0": {
         "tooltip": null
+      }
+    }
+  },
+  "SDPoseDrawKeypoints": {
+    "display_name": "SDPoseDrawKeypoints",
+    "inputs": {
+      "draw_body": {
+        "name": "draw_body"
+      },
+      "draw_face": {
+        "name": "draw_face"
+      },
+      "draw_feet": {
+        "name": "draw_feet"
+      },
+      "draw_hands": {
+        "name": "draw_hands"
+      },
+      "face_point_size": {
+        "name": "face_point_size"
+      },
+      "keypoints": {
+        "name": "keypoints"
+      },
+      "score_threshold": {
+        "name": "score_threshold"
+      },
+      "stick_width": {
+        "name": "stick_width"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "SDPoseFaceBBoxes": {
+    "display_name": "SDPoseFaceBBoxes",
+    "inputs": {
+      "force_square": {
+        "name": "force_square",
+        "tooltip": "Agrandir l’axe le plus court de la boîte pour que la région découpée soit toujours carrée."
+      },
+      "keypoints": {
+        "name": "keypoints"
+      },
+      "scale": {
+        "name": "scale",
+        "tooltip": "Multiplicateur pour la zone de la boîte englobante autour de chaque visage détecté."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "bboxes",
+        "tooltip": "Boîtes englobantes des visages par image, compatibles avec l’entrée bboxes de SDPoseKeypointExtractor."
+      }
+    }
+  },
+  "SDPoseKeypointExtractor": {
+    "description": "Extraire les points clés de pose à partir d’images en utilisant le modèle SDPose : https://huggingface.co/Comfy-Org/SDPose/tree/main/checkpoints",
+    "display_name": "SDPoseKeypointExtractor",
+    "inputs": {
+      "batch_size": {
+        "name": "batch_size"
+      },
+      "bboxes": {
+        "name": "bboxes",
+        "tooltip": "Boîtes englobantes optionnelles pour des détections plus précises. Requis pour la détection multi-personnes."
+      },
+      "image": {
+        "name": "image"
+      },
+      "model": {
+        "name": "model"
+      },
+      "vae": {
+        "name": "vae"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "keypoints",
+        "tooltip": "Points clés au format OpenPose (canvas_width, canvas_height, people)"
       }
     }
   },
@@ -12659,9 +13787,11 @@
     },
     "outputs": {
       "0": {
+        "name": "sortie",
         "tooltip": null
       },
       "1": {
+        "name": "sortie_débruitée",
         "tooltip": null
       }
     }
@@ -12687,9 +13817,11 @@
     },
     "outputs": {
       "0": {
+        "name": "sortie",
         "tooltip": null
       },
       "1": {
+        "name": "sortie_débruitée",
         "tooltip": null
       }
     }
@@ -12992,6 +14124,7 @@
     },
     "outputs": {
       "0": {
+        "name": "valeur_sigma",
         "tooltip": null
       }
     }
@@ -13551,9 +14684,34 @@
     },
     "outputs": {
       "0": {
+        "name": "gauche",
         "tooltip": null
       },
       "1": {
+        "name": "droite",
+        "tooltip": null
+      }
+    }
+  },
+  "SplitImageToTileList": {
+    "description": "Divise une image en une liste groupée de tuiles avec un chevauchement spécifié.",
+    "display_name": "Diviser l'image en liste de tuiles",
+    "inputs": {
+      "image": {
+        "name": "image"
+      },
+      "overlap": {
+        "name": "chevauchement"
+      },
+      "tile_height": {
+        "name": "hauteur_tuile"
+      },
+      "tile_width": {
+        "name": "largeur_tuile"
+      }
+    },
+    "outputs": {
+      "0": {
         "tooltip": null
       }
     }
@@ -13586,9 +14744,11 @@
     },
     "outputs": {
       "0": {
+        "name": "sigmas_hauts",
         "tooltip": null
       },
       "1": {
+        "name": "sigmas_bas",
         "tooltip": null
       }
     }
@@ -13605,9 +14765,11 @@
     },
     "outputs": {
       "0": {
+        "name": "sigmas_hauts",
         "tooltip": null
       },
       "1": {
+        "name": "sigmas_bas",
         "tooltip": null
       }
     }
@@ -14335,6 +15497,41 @@
       }
     }
   },
+  "Tencent3DTextureEditNode": {
+    "description": "Après avoir importé le modèle 3D, effectuez la retouche de la texture du modèle 3D.",
+    "display_name": "Hunyuan3D : Édition de texture 3D",
+    "inputs": {
+      "control_after_generate": {
+        "name": "contrôle après génération"
+      },
+      "model_3d": {
+        "name": "model_3d",
+        "tooltip": "Modèle 3D au format FBX. Le modèle doit comporter moins de 100 000 faces."
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "Décrit l’édition de la texture. Prend en charge jusqu’à 1024 caractères UTF-8."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Le seed contrôle si le nœud doit être relancé ; les résultats restent non déterministes quel que soit le seed."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "GLB",
+        "tooltip": null
+      },
+      "1": {
+        "name": "OBJ",
+        "tooltip": null
+      },
+      "2": {
+        "name": "texture_image",
+        "tooltip": null
+      }
+    }
+  },
   "TencentImageToModelNode": {
     "display_name": "Hunyuan3D : Image(s) vers Modèle (Pro)",
     "inputs": {
@@ -14372,11 +15569,89 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "fichier_modèle",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
       },
       "2": {
+        "name": "OBJ",
+        "tooltip": null
+      },
+      "3": {
+        "name": "texture_image",
+        "tooltip": null
+      },
+      "4": {
+        "name": "optionnel_metallic",
+        "tooltip": null
+      },
+      "5": {
+        "name": "optionnel_normal",
+        "tooltip": null
+      },
+      "6": {
+        "name": "optionnel_roughness",
+        "tooltip": null
+      }
+    }
+  },
+  "TencentModelTo3DUVNode": {
+    "description": "Effectue le dépliage UV d’un modèle 3D pour générer une texture UV. Le modèle d’entrée doit comporter moins de 30 000 faces.",
+    "display_name": "Hunyuan3D : Modèle vers UV",
+    "inputs": {
+      "control_after_generate": {
+        "name": "contrôle après génération"
+      },
+      "model_3d": {
+        "name": "modèle_3d",
+        "tooltip": "Modèle 3D en entrée (GLB, OBJ ou FBX)"
+      },
+      "seed": {
+        "name": "graine",
+        "tooltip": "La graine contrôle si le nœud doit être relancé ; les résultats sont non déterministes quel que soit la graine."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "OBJ",
+        "tooltip": null
+      },
+      "1": {
+        "name": "FBX",
+        "tooltip": null
+      }
+    }
+  },
+  "TencentSmartTopologyNode": {
+    "description": "Effectue une retopologie intelligente sur un modèle 3D. Prend en charge les formats GLB/OBJ ; 200 Mo max ; recommandé pour les modèles haute résolution.",
+    "display_name": "Hunyuan3D : Topologie intelligente",
+    "inputs": {
+      "control_after_generate": {
+        "name": "contrôle après génération"
+      },
+      "face_level": {
+        "name": "niveau_de_faces",
+        "tooltip": "Niveau de réduction des polygones."
+      },
+      "model_3d": {
+        "name": "modèle_3d",
+        "tooltip": "Modèle 3D en entrée (GLB ou OBJ)"
+      },
+      "polygon_type": {
+        "name": "type_polygone",
+        "tooltip": "Type de composition de surface."
+      },
+      "seed": {
+        "name": "graine",
+        "tooltip": "La graine contrôle si le nœud doit être relancé ; les résultats sont non déterministes quel que soit la graine."
+      }
+    },
+    "outputs": {
+      "0": {
         "name": "OBJ",
         "tooltip": null
       }
@@ -14411,12 +15686,20 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "fichier_modèle",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
       },
       "2": {
         "name": "OBJ",
+        "tooltip": null
+      },
+      "3": {
+        "name": "texture_image",
         "tooltip": null
       }
     }
@@ -14605,6 +15888,108 @@
     },
     "outputs": {
       "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "TextGenerate": {
+    "display_name": "TextGenerate",
+    "inputs": {
+      "clip": {
+        "name": "clip"
+      },
+      "image": {
+        "name": "image"
+      },
+      "max_length": {
+        "name": "longueur_max"
+      },
+      "prompt": {
+        "name": "invite"
+      },
+      "sampling_mode": {
+        "name": "mode_d'échantillonnage"
+      },
+      "sampling_mode_min_p": {
+        "name": "min_p"
+      },
+      "sampling_mode_presence_penalty": {
+        "name": "pénalité_de_presence"
+      },
+      "sampling_mode_repetition_penalty": {
+        "name": "pénalité_de_répétition"
+      },
+      "sampling_mode_seed": {
+        "name": "graine"
+      },
+      "sampling_mode_temperature": {
+        "name": "température"
+      },
+      "sampling_mode_top_k": {
+        "name": "top_k"
+      },
+      "sampling_mode_top_p": {
+        "name": "top_p"
+      },
+      "thinking": {
+        "name": "réflexion",
+        "tooltip": "Fonctionner en mode réflexion si le modèle le permet."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "texte_généré",
+        "tooltip": null
+      }
+    }
+  },
+  "TextGenerateLTX2Prompt": {
+    "display_name": "TextGenerateLTX2Prompt",
+    "inputs": {
+      "clip": {
+        "name": "clip"
+      },
+      "image": {
+        "name": "image"
+      },
+      "max_length": {
+        "name": "longueur_maximale"
+      },
+      "prompt": {
+        "name": "invite"
+      },
+      "sampling_mode": {
+        "name": "mode_d'échantillonnage"
+      },
+      "sampling_mode_min_p": {
+        "name": "min_p"
+      },
+      "sampling_mode_presence_penalty": {
+        "name": "pénalité_de_presence"
+      },
+      "sampling_mode_repetition_penalty": {
+        "name": "pénalité_de_répétition"
+      },
+      "sampling_mode_seed": {
+        "name": "graine"
+      },
+      "sampling_mode_temperature": {
+        "name": "température"
+      },
+      "sampling_mode_top_k": {
+        "name": "top_k"
+      },
+      "sampling_mode_top_p": {
+        "name": "top_p"
+      },
+      "thinking": {
+        "name": "réflexion",
+        "tooltip": "Fonctionner en mode réflexion si le modèle le permet."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "texte_généré",
         "tooltip": null
       }
     }
@@ -14869,6 +16254,10 @@
         "name": "positif",
         "tooltip": "Le conditionnement positif à utiliser pour l'entraînement."
       },
+      "quantized_backward": {
+        "name": "quantized_backward",
+        "tooltip": "Lorsque le paramètre training_dtype est défini sur 'none' et que l'entraînement se fait sur un modèle quantifié, effectue la rétropropagation avec une multiplication matricielle quantifiée si activé."
+      },
       "rank": {
         "name": "rang",
         "tooltip": "Le rang des couches LoRA."
@@ -14888,16 +16277,16 @@
     },
     "outputs": {
       "0": {
+        "name": "lora",
         "tooltip": "Modèle avec LoRA appliqué"
       },
       "1": {
+        "name": "carte_de_perte",
         "tooltip": "Poids LoRA"
       },
       "2": {
+        "name": "étapes",
         "tooltip": "Historique de la perte"
-      },
-      "3": {
-        "tooltip": "Nombre total d’étapes d’entraînement"
       }
     }
   },
@@ -15066,6 +16455,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "fichier_modèle",
+        "tooltip": null
+      },
+      "1": {
+        "name": "modèle task_id",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -15123,6 +16520,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "fichier_modèle",
+        "tooltip": null
+      },
+      "1": {
+        "name": "modèle task_id",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -15139,6 +16544,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "fichier_modèle",
+        "tooltip": null
+      },
+      "1": {
+        "name": "modèle task_id",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -15156,6 +16569,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "retarget task_id",
+        "tooltip": null
+      },
+      "1": {
+        "name": "retarget task_id",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -15170,6 +16591,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "fichier_modèle",
+        "tooltip": null
+      },
+      "1": {
+        "name": "rig task_id",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -15220,6 +16649,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "fichier_modèle",
+        "tooltip": null
+      },
+      "1": {
+        "name": "modèle task_id",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -15249,6 +16686,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "fichier_modèle",
+        "tooltip": null
+      },
+      "1": {
+        "name": "modèle task_id",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -17286,6 +18731,68 @@
     "outputs": {
       "0": {
         "tooltip": null
+      }
+    }
+  },
+  "WanSCAILToVideo": {
+    "display_name": "WanSCAILToVideo",
+    "inputs": {
+      "batch_size": {
+        "name": "taille_du_lot"
+      },
+      "clip_vision_output": {
+        "name": "clip_vision_output"
+      },
+      "height": {
+        "name": "hauteur"
+      },
+      "length": {
+        "name": "longueur"
+      },
+      "negative": {
+        "name": "négatif"
+      },
+      "pose_end": {
+        "name": "fin_de_pose",
+        "tooltip": "Étape de fin pour utiliser le conditionnement de pose."
+      },
+      "pose_start": {
+        "name": "début_de_pose",
+        "tooltip": "Étape de début pour utiliser le conditionnement de pose."
+      },
+      "pose_strength": {
+        "name": "force_de_pose",
+        "tooltip": "Force du latent de pose."
+      },
+      "pose_video": {
+        "name": "vidéo_de_pose",
+        "tooltip": "Vidéo utilisée pour le conditionnement de pose. Sera réduite à la moitié de la résolution de la vidéo principale."
+      },
+      "positive": {
+        "name": "positif"
+      },
+      "reference_image": {
+        "name": "image_de_référence"
+      },
+      "vae": {
+        "name": "vae"
+      },
+      "width": {
+        "name": "largeur"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "positif",
+        "tooltip": null
+      },
+      "1": {
+        "name": "négatif",
+        "tooltip": null
+      },
+      "2": {
+        "name": "latent",
+        "tooltip": "Latent vide de la taille de génération."
       }
     }
   },

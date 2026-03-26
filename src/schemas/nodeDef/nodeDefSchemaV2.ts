@@ -126,6 +126,20 @@ const zTextareaInputSpec = zBaseInputOptions.extend({
     .optional()
 })
 
+const zCurvePoint = z.tuple([z.number(), z.number()])
+
+const zCurveData = z.object({
+  points: z.array(zCurvePoint),
+  interpolation: z.enum(['monotone_cubic', 'linear'])
+})
+
+const zCurveInputSpec = zBaseInputOptions.extend({
+  type: z.literal('CURVE'),
+  name: z.string(),
+  isOptional: z.boolean().optional(),
+  default: zCurveData.optional()
+})
+
 const zCustomInputSpec = zBaseInputOptions.extend({
   type: z.string(),
   name: z.string(),
@@ -146,6 +160,7 @@ const zInputSpec = z.union([
   zChartInputSpec,
   zGalleriaInputSpec,
   zTextareaInputSpec,
+  zCurveInputSpec,
   zCustomInputSpec
 ])
 
@@ -190,6 +205,7 @@ export type BoundingBoxInputSpec = z.infer<typeof zBoundingBoxInputSpec>
 export type ChartInputSpec = z.infer<typeof zChartInputSpec>
 export type GalleriaInputSpec = z.infer<typeof zGalleriaInputSpec>
 export type TextareaInputSpec = z.infer<typeof zTextareaInputSpec>
+export type CurveInputSpec = z.infer<typeof zCurveInputSpec>
 export type CustomInputSpec = z.infer<typeof zCustomInputSpec>
 
 export type InputSpec = z.infer<typeof zInputSpec>

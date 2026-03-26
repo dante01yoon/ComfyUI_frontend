@@ -82,14 +82,14 @@ export function createMockSubgraphNode(
  * Creates a mock LGraphCanvas with minimal required properties for testing
  */
 export function createMockCanvas(
-  overrides: Partial<LGraphCanvas> = {}
+  overrides: Partial<LGraphCanvas> | Record<string, unknown> = {}
 ): LGraphCanvas {
   return {
     setDirty: vi.fn(),
     state: {
       selectionChanged: false
     },
-    ...overrides
+    ...(overrides as Partial<LGraphCanvas>)
   } as LGraphCanvas
 }
 
@@ -125,7 +125,36 @@ export function createMockCanvasRenderingContext2D(
   overrides: Partial<CanvasRenderingContext2D> = {}
 ): CanvasRenderingContext2D {
   const partial: Partial<CanvasRenderingContext2D> = {
+    save: vi.fn(),
+    restore: vi.fn(),
+    translate: vi.fn(),
+    scale: vi.fn(),
+    fillRect: vi.fn(),
+    strokeRect: vi.fn(),
+    fillText: vi.fn(),
     measureText: vi.fn(() => ({ width: 10 }) as TextMetrics),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    fill: vi.fn(),
+    closePath: vi.fn(),
+    arc: vi.fn(),
+    rect: vi.fn(),
+    clip: vi.fn(),
+    clearRect: vi.fn(),
+    setTransform: vi.fn(),
+    roundRect: vi.fn(),
+    getTransform: vi.fn(
+      () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }) as DOMMatrix
+    ),
+    font: '',
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    globalAlpha: 1,
+    textAlign: 'left' as CanvasTextAlign,
+    textBaseline: 'alphabetic' as CanvasTextBaseline,
     ...overrides
   }
   return partial as CanvasRenderingContext2D
@@ -226,7 +255,10 @@ export function createMockChangeTracker(
     undoQueue: [],
     redoQueue: [],
     changeCount: 0,
+    checkState: vi.fn(),
     reset: vi.fn(),
+    restore: vi.fn(),
+    store: vi.fn(),
     ...overrides
   }
   return partial as Partial<ChangeTracker> as ChangeTracker
@@ -273,6 +305,8 @@ export function createMockCanvas2DContext(
     fillStyle: '',
     strokeStyle: '',
     lineWidth: 1,
+    save: vi.fn(),
+    restore: vi.fn(),
     ...overrides
   }
   return partial as CanvasRenderingContext2D

@@ -3,6 +3,7 @@ import { readFileSync } from 'fs'
 import type { Page } from '@playwright/test'
 
 import type { Position } from '../types'
+import { getMimeType } from './mimeTypeUtil'
 
 export class DragDropHelper {
   constructor(
@@ -24,13 +25,15 @@ export class DragDropHelper {
       url?: string
       dropPosition?: Position
       waitForUpload?: boolean
+      preserveNativePropagation?: boolean
     } = {}
   ): Promise<void> {
     const {
       dropPosition = { x: 100, y: 100 },
       fileName,
       url,
-      waitForUpload = false
+      waitForUpload = false,
+      preserveNativePropagation = false
     } = options
 
     if (!fileName && !url)
@@ -42,25 +45,15 @@ export class DragDropHelper {
       fileType?: string
       buffer?: Uint8Array | number[]
       url?: string
-    } = { dropPosition }
+      preserveNativePropagation: boolean
+    } = { dropPosition, preserveNativePropagation }
 
     if (fileName) {
       const filePath = this.assetPath(fileName)
       const buffer = readFileSync(filePath)
 
-      const getFileType = (fileName: string) => {
-        if (fileName.endsWith('.png')) return 'image/png'
-        if (fileName.endsWith('.svg')) return 'image/svg+xml'
-        if (fileName.endsWith('.webp')) return 'image/webp'
-        if (fileName.endsWith('.webm')) return 'video/webm'
-        if (fileName.endsWith('.json')) return 'application/json'
-        if (fileName.endsWith('.glb')) return 'model/gltf-binary'
-        if (fileName.endsWith('.avif')) return 'image/avif'
-        return 'application/octet-stream'
-      }
-
       evaluateParams.fileName = fileName
-      evaluateParams.fileType = getFileType(fileName)
+      evaluateParams.fileType = getMimeType(fileName)
       evaluateParams.buffer = [...new Uint8Array(buffer)]
     }
 
@@ -115,15 +108,27 @@ export class DragDropHelper {
       const dragOverEvent = new DragEvent('dragover', eventOptions)
       const dropEvent = new DragEvent('drop', eventOptions)
 
-      Object.defineProperty(dropEvent, 'preventDefault', {
-        value: () => {},
-        writable: false
-      })
+      const graphCanvasElement = document.querySelector('#graph-canvas')
 
-      Object.defineProperty(dropEvent, 'stopPropagation', {
-        value: () => {},
-        writable: false
-      })
+      // Keep Litegraph's drag-over node tracking in sync when the drop target is a
+      // Vue node DOM overlay outside of the graph canvas element.
+      if (graphCanvasElement && !graphCanvasElement.contains(targetElement)) {
+        graphCanvasElement.dispatchEvent(
+          new DragEvent('dragover', eventOptions)
+        )
+      }
+
+      if (!params.preserveNativePropagation) {
+        Object.defineProperty(dropEvent, 'preventDefault', {
+          value: () => {},
+          writable: false
+        })
+
+        Object.defineProperty(dropEvent, 'stopPropagation', {
+          value: () => {},
+          writable: false
+        })
+      }
 
       targetElement.dispatchEvent(dragOverEvent)
       targetElement.dispatchEvent(dropEvent)
@@ -154,7 +159,10 @@ export class DragDropHelper {
 
   async dragAndDropURL(
     url: string,
-    options: { dropPosition?: Position } = {}
+    options: {
+      dropPosition?: Position
+      preserveNativePropagation?: boolean
+    } = {}
   ): Promise<void> {
     return this.dragAndDropExternalResource({ url, ...options })
   }

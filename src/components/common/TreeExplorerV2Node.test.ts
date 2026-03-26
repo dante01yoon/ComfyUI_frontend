@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import type { FlattenedItem } from 'reka-ui'
 import { ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
+import { createI18n } from 'vue-i18n'
 
 import type { ComfyNodeDefImpl } from '@/stores/nodeDefStore'
 import type { RenderedTreeExplorerNode } from '@/types/treeExplorerTypes'
@@ -9,9 +10,22 @@ import { InjectKeyContextMenuNode } from '@/types/treeExplorerTypes'
 
 import TreeExplorerV2Node from './TreeExplorerV2Node.vue'
 
+const i18n = createI18n({
+  legacy: false,
+  locale: 'en',
+  messages: { en: {} }
+})
+
 vi.mock('@/platform/settings/settingStore', () => ({
   useSettingStore: () => ({
     get: vi.fn().mockReturnValue('left')
+  })
+}))
+
+vi.mock('@/stores/nodeBookmarkStore', () => ({
+  useNodeBookmarkStore: () => ({
+    isBookmarked: vi.fn().mockReturnValue(false),
+    toggleBookmark: vi.fn()
   })
 }))
 
@@ -78,12 +92,9 @@ describe('TreeExplorerV2Node', () => {
     return {
       wrapper: mount(TreeExplorerV2Node, {
         global: {
+          plugins: [i18n],
           stubs: {
             TreeItem: treeItemStub.stub,
-            ContextMenuTrigger: {
-              name: 'ContextMenuTrigger',
-              template: '<div data-testid="context-menu-trigger"><slot /></div>'
-            },
             Teleport: { template: '<div />' }
           },
           provide: {
@@ -145,36 +156,12 @@ describe('TreeExplorerV2Node', () => {
   })
 
   describe('context menu', () => {
-    it('renders ContextMenuTrigger when showContextMenu is true for nodes', () => {
-      const { wrapper } = mountComponent({
-        item: createMockItem('node'),
-        showContextMenu: true
-      })
-
-      expect(
-        wrapper.find('[data-testid="context-menu-trigger"]').exists()
-      ).toBe(true)
-    })
-
-    it('does not render ContextMenuTrigger for folder items', () => {
-      const { wrapper } = mountComponent({
-        item: createMockItem('folder')
-      })
-
-      expect(
-        wrapper.find('[data-testid="context-menu-trigger"]').exists()
-      ).toBe(false)
-    })
-
-    it('sets contextMenuNode when contextmenu event is triggered', async () => {
+    it('sets contextMenuNode when contextmenu event is triggered on node', async () => {
       const contextMenuNode = ref<RenderedTreeExplorerNode | null>(null)
       const nodeItem = createMockItem('node')
 
       const { wrapper } = mountComponent(
-        {
-          item: nodeItem,
-          showContextMenu: true
-        },
+        { item: nodeItem },
         {
           provide: {
             [InjectKeyContextMenuNode as symbol]: contextMenuNode
@@ -186,6 +173,24 @@ describe('TreeExplorerV2Node', () => {
       await nodeDiv.trigger('contextmenu')
 
       expect(contextMenuNode.value).toEqual(nodeItem.value)
+    })
+
+    it('does not set contextMenuNode for folder items', async () => {
+      const contextMenuNode = ref<RenderedTreeExplorerNode | null>(null)
+
+      const { wrapper } = mountComponent(
+        { item: createMockItem('folder') },
+        {
+          provide: {
+            [InjectKeyContextMenuNode as symbol]: contextMenuNode
+          }
+        }
+      )
+
+      const folderDiv = wrapper.find('div.group\\/tree-node')
+      await folderDiv.trigger('contextmenu')
+
+      expect(contextMenuNode.value).toBeNull()
     })
   })
 

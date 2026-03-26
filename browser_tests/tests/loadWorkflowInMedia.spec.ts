@@ -29,12 +29,27 @@ test.describe(
       // Currently opens missing nodes dialog which is outside scope of AVIF loading functionality
       // 'workflow.avif'
     ]
+    const filesWithUpload = new Set(['no_workflow.webp'])
+
     fileNames.forEach(async (fileName) => {
       test(`Load workflow in ${fileName} (drop from filesystem)`, async ({
         comfyPage
       }) => {
+        const shouldUpload = filesWithUpload.has(fileName)
+        const uploadRequestPromise = shouldUpload
+          ? comfyPage.page.waitForRequest((req) =>
+              req.url().includes('/upload/')
+            )
+          : null
+
         await comfyPage.dragDrop.dragAndDropFile(`workflowInMedia/${fileName}`)
-        await expect(comfyPage.canvas).toHaveScreenshot(`${fileName}.png`)
+
+        if (uploadRequestPromise) {
+          const request = await uploadRequestPromise
+          expect(request.url()).toContain('/upload/')
+        } else {
+          await expect(comfyPage.canvas).toHaveScreenshot(`${fileName}.png`)
+        }
       })
     })
 
@@ -51,6 +66,45 @@ test.describe(
           `dropped_workflow_url_${readableName}.png`
         )
       })
+    })
+
+    test('Load workflow from URL dropped onto Vue node', async ({
+      comfyPage
+    }) => {
+      const fakeUrl = 'https://example.com/workflow.png'
+      await comfyPage.page.route(fakeUrl, (route) =>
+        route.fulfill({
+          path: comfyPage.assetPath('workflowInMedia/workflow_itxt.png')
+        })
+      )
+
+      await comfyPage.settings.setSetting('Comfy.VueNodes.Enabled', true)
+      await comfyPage.vueNodes.waitForNodes()
+
+      const initialNodeCount = await comfyPage.nodeOps.getGraphNodesCount()
+
+      const node = comfyPage.vueNodes.getNodeByTitle('KSampler')
+      const box = await node.boundingBox()
+      expect(box).not.toBeNull()
+
+      const dropPosition = {
+        x: box!.x + box!.width / 2,
+        y: box!.y + box!.height / 2
+      }
+
+      await comfyPage.dragDrop.dragAndDropURL(fakeUrl, {
+        dropPosition,
+        preserveNativePropagation: true
+      })
+
+      await comfyPage.page.waitForFunction(
+        (prevCount) => window.app!.graph.nodes.length !== prevCount,
+        initialNodeCount,
+        { timeout: 10000 }
+      )
+
+      const newNodeCount = await comfyPage.nodeOps.getGraphNodesCount()
+      expect(newNodeCount).not.toBe(initialNodeCount)
     })
   }
 )

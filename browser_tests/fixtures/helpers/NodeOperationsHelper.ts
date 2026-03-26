@@ -33,6 +33,11 @@ export class NodeOperationsHelper {
     })
   }
 
+  /** Reads from `window.app.graph` (the root workflow graph). */
+  async getNodeCount(): Promise<number> {
+    return await this.page.evaluate(() => window.app!.graph.nodes.length)
+  }
+
   async getNodes(): Promise<LGraphNode[]> {
     return await this.page.evaluate(() => {
       return window.app!.graph.nodes
@@ -173,7 +178,7 @@ export class NodeOperationsHelper {
     await this.page.locator('#graph-canvas').click({
       position: DefaultGraphPositions.emptyLatentWidgetClick
     })
-    const dialogInput = this.page.locator('.graphdialog input[type="text"]')
+    const dialogInput = this.page.locator('.graphdialog input.value')
     await dialogInput.click()
     await dialogInput.fill('128')
     await dialogInput.press('Enter')

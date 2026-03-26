@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test'
 
 import { comfyPageFixture as test } from '../fixtures/ComfyPage'
+import { TestIds } from '../fixtures/selectors'
 
 // Constants
 const RENAMED_INPUT_NAME = 'renamed_input'
@@ -53,7 +54,7 @@ test.describe('Subgraph Operations', { tag: ['@slow', '@subgraph'] }, () => {
   ): Promise<boolean> {
     return await comfyPage.page.evaluate(() => {
       const graph = window.app!.canvas.graph
-      return graph?.constructor?.name === 'Subgraph'
+      return !!graph && 'inputNode' in graph
     })
   }
 
@@ -375,6 +376,45 @@ test.describe('Subgraph Operations', { tag: ['@slow', '@subgraph'] }, () => {
     })
   })
 
+  test.describe('Subgraph Unpacking', () => {
+    test('Unpacking subgraph with duplicate links does not create extra links', async ({
+      comfyPage
+    }) => {
+      await comfyPage.workflow.loadWorkflow(
+        'subgraphs/subgraph-duplicate-links'
+      )
+
+      const result = await comfyPage.page.evaluate(() => {
+        const graph = window.app!.graph!
+        const subgraphNode = graph.nodes.find((n) => n.isSubgraphNode())
+        if (!subgraphNode || !subgraphNode.isSubgraphNode()) {
+          return { error: 'No subgraph node found' }
+        }
+
+        graph.unpackSubgraph(subgraphNode)
+
+        const linkCount = graph.links.size
+        const nodes = graph.nodes
+        const ksampler = nodes.find((n) => n.type === 'KSampler')
+        if (!ksampler) return { error: 'No KSampler found after unpack' }
+
+        const linkedInputCount = ksampler.inputs.filter(
+          (i) => i.link != null
+        ).length
+
+        return { linkCount, linkedInputCount, nodeCount: nodes.length }
+      })
+
+      expect(result).not.toHaveProperty('error')
+      // Should have exactly 1 link (EmptyLatentImage→KSampler)
+      // not 4 (with 3 duplicates). The KSampler→output link is dropped
+      // because the subgraph output has no downstream connection.
+      expect(result.linkCount).toBe(1)
+      // KSampler should have exactly 1 linked input (latent_image)
+      expect(result.linkedInputCount).toBe(1)
+    })
+  })
+
   test.describe('Subgraph Creation and Deletion', () => {
     test('Can create subgraph from selected nodes', async ({ comfyPage }) => {
       await comfyPage.workflow.loadWorkflow('default')
@@ -592,6 +632,51 @@ test.describe('Subgraph Operations', { tag: ['@slow', '@subgraph'] }, () => {
       expect(updatedBreadcrumbText).toContain(UPDATED_SUBGRAPH_TITLE)
       expect(updatedBreadcrumbText).not.toBe(initialBreadcrumbText)
     })
+
+    test('Switching workflows while inside subgraph returns to root graph context', async ({
+      comfyPage
+    }) => {
+      await comfyPage.workflow.loadWorkflow('subgraphs/basic-subgraph')
+      await comfyPage.nextFrame()
+
+      const subgraphNode = await comfyPage.nodeOps.getNodeRefById('2')
+      await subgraphNode.navigateIntoSubgraph()
+      await comfyPage.nextFrame()
+
+      expect(await isInSubgraph(comfyPage)).toBe(true)
+      await expect(comfyPage.page.locator(SELECTORS.breadcrumb)).toBeVisible()
+
+      await comfyPage.workflow.loadWorkflow('default')
+      await comfyPage.nextFrame()
+
+      expect(await isInSubgraph(comfyPage)).toBe(false)
+
+      await comfyPage.workflow.loadWorkflow('subgraphs/basic-subgraph')
+      await comfyPage.nextFrame()
+      expect(await isInSubgraph(comfyPage)).toBe(false)
+    })
+
+    test('Breadcrumb disappears after switching workflows while inside subgraph', async ({
+      comfyPage
+    }) => {
+      await comfyPage.workflow.loadWorkflow('subgraphs/basic-subgraph')
+      await comfyPage.nextFrame()
+
+      const breadcrumb = comfyPage.page
+        .getByTestId(TestIds.breadcrumb.subgraph)
+        .locator('.p-breadcrumb')
+
+      const subgraphNode = await comfyPage.nodeOps.getNodeRefById('2')
+      await subgraphNode.navigateIntoSubgraph()
+      await comfyPage.nextFrame()
+
+      await expect(breadcrumb).toBeVisible()
+
+      await comfyPage.workflow.loadWorkflow('default')
+      await comfyPage.nextFrame()
+
+      await expect(breadcrumb).toBeHidden()
+    })
   })
 
   test.describe('DOM Widget Promotion', () => {
@@ -705,11 +790,9 @@ test.describe('Subgraph Operations', { tag: ['@slow', '@subgraph'] }, () => {
       })
 
       // Click breadcrumb to navigate back to parent graph
-      const homeBreadcrumb = comfyPage.page.getByRole('link', {
-        // In the subgraph navigation breadcrumbs, the home/top level
-        // breadcrumb is just the workflow name without the folder path
-        name: 'subgraph-with-promoted-text-widget'
-      })
+      const homeBreadcrumb = comfyPage.page.locator(
+        '.p-breadcrumb-list > :first-child'
+      )
       await homeBreadcrumb.waitFor({ state: 'visible' })
       await homeBreadcrumb.click()
       await comfyPage.nextFrame()

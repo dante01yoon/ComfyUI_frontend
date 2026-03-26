@@ -1,130 +1,174 @@
 <script setup lang="ts">
 import {
-  useAsyncState,
   useEventListener,
-  useInfiniteScroll
+  useInfiniteScroll,
+  useResizeObserver
 } from '@vueuse/core'
-import { computed, ref, toRaw, toValue, useTemplateRef, watch } from 'vue'
-import type { MaybeRef } from 'vue'
-
-import { useProgressBarBackground } from '@/composables/useProgressBarBackground'
-import { useQueueProgress } from '@/composables/queue/useQueueProgress'
-import { CanvasPointer } from '@/lib/litegraph/src/CanvasPointer'
-import { useMediaAssets } from '@/platform/assets/composables/media/useMediaAssets'
-import { getOutputAssetMetadata } from '@/platform/assets/schemas/assetMetadataSchema'
-import type { AssetItem } from '@/platform/assets/schemas/assetSchema'
+import { storeToRefs } from 'pinia'
+import type { ComponentPublicInstance } from 'vue'
 import {
-  getMediaType,
-  mediaTypes
-} from '@/renderer/extensions/linearMode/mediaTypes'
-import type { NodeExecutionOutput, ResultItem } from '@/schemas/apiSchema'
-import { getJobDetail } from '@/services/jobOutputCache'
-import { useQueueStore, ResultItemImpl } from '@/stores/queueStore'
+  computed,
+  nextTick,
+  ref,
+  toValue,
+  useTemplateRef,
+  watch,
+  watchEffect
+} from 'vue'
+
+import { CanvasPointer } from '@/lib/litegraph/src/CanvasPointer'
+import OutputHistoryActiveQueueItem from '@/renderer/extensions/linearMode/OutputHistoryActiveQueueItem.vue'
+import OutputHistoryItem from '@/renderer/extensions/linearMode/OutputHistoryItem.vue'
+import { useLinearOutputStore } from '@/renderer/extensions/linearMode/linearOutputStore'
+import type {
+  OutputSelection,
+  SelectionValue
+} from '@/renderer/extensions/linearMode/linearModeTypes'
+import OutputPreviewItem from '@/renderer/extensions/linearMode/OutputPreviewItem.vue'
+import { useOutputHistory } from '@/renderer/extensions/linearMode/useOutputHistory'
+import { useWorkflowStore } from '@/platform/workflow/management/stores/workflowStore'
+import { useAppModeStore } from '@/stores/appModeStore'
+import { useQueueStore } from '@/stores/queueStore'
 import { cn } from '@/utils/tailwindUtil'
 
-const outputs = useMediaAssets('output')
-const {
-  progressBarContainerClass,
-  progressBarPrimaryClass,
-  progressBarSecondaryClass,
-  progressPercentStyle
-} = useProgressBarBackground()
-const { totalPercent, currentNodePercent } = useQueueProgress()
+const { outputs, allOutputs, selectFirstHistory, mayBeActiveWorkflowPending } =
+  useOutputHistory()
+const { hasOutputs } = storeToRefs(useAppModeStore())
 const queueStore = useQueueStore()
-
-void outputs.fetchMediaList()
+const store = useLinearOutputStore()
+const workflowStore = useWorkflowStore()
 
 const emit = defineEmits<{
-  updateSelection: [
-    selection: [AssetItem | undefined, ResultItemImpl | undefined, boolean]
-  ]
+  updateSelection: [selection: OutputSelection]
 }>()
 
-const selectedIndex = ref<[number, number]>([-1, 0])
+const queueCount = computed(
+  () => queueStore.runningTasks.length + queueStore.pendingTasks.length
+)
+
+const itemClass = cn(
+  'shrink-0 cursor-pointer rounded-lg border-2 border-transparent p-1 outline-none',
+  'relative data-[state=checked]:border-interface-panel-job-progress-border'
+)
+
+const hasActiveContent = computed(
+  () => store.activeWorkflowInProgressItems.length > 0
+)
+
+const visibleHistory = computed(() =>
+  outputs.media.value.filter((a) => allOutputs(a).length > 0)
+)
+
+const selectableItems = computed(() => {
+  const items: SelectionValue[] = []
+  if (mayBeActiveWorkflowPending.value) {
+    items.push({ id: 'slot:pending', kind: 'inProgress', itemId: 'pending' })
+  }
+  for (const item of store.activeWorkflowInProgressItems) {
+    items.push({
+      id: `slot:${item.id}`,
+      kind: 'inProgress',
+      itemId: item.id
+    })
+  }
+  for (const asset of outputs.media.value) {
+    const outs = allOutputs(asset)
+    for (let k = 0; k < outs.length; k++) {
+      items.push({
+        id: `history:${asset.id}:${k}`,
+        kind: 'history',
+        assetId: asset.id,
+        key: k
+      })
+    }
+  }
+  return items
+})
+
+const selectionMap = computed(
+  () => new Map(selectableItems.value.map((v) => [v.id, v]))
+)
+
+const selectedValue = computed(() => {
+  if (!store.selectedId) return undefined
+  return selectionMap.value.get(store.selectedId)
+})
+
+function itemAttrs(id: string) {
+  const selected = store.selectedId === id
+  return {
+    'data-state': selected ? 'checked' : 'unchecked',
+    tabindex: selected ? 0 : -1
+  }
+}
+
+const selectedItemEl = ref<Element | null>(null)
+
+function selectedRef(id: string) {
+  return store.selectedId === id
+    ? (el: Element | ComponentPublicInstance | null) => {
+        selectedItemEl.value = el instanceof Element ? el : null
+      }
+    : undefined
+}
 
 function doEmit() {
-  const [index] = selectedIndex.value
-  emit('updateSelection', [
-    outputs.media.value[index],
-    selectedOutput.value,
-    selectedIndex.value[0] <= 0
-  ])
-}
-
-const outputsRef = useTemplateRef('outputsRef')
-useInfiniteScroll(outputsRef, outputs.loadMore, {
-  canLoadMore: () => outputs.hasMore.value
-})
-
-watch(selectedIndex, () => {
-  const [index, key] = selectedIndex.value
-  if (!outputsRef.value) return
-
-  const outputElement = outputsRef.value?.querySelectorAll(
-    `[data-output-index="${index}"]`
-  )?.[key]
-  if (!outputElement) return
-
-  //container: 'nearest' is nice, but bleeding edge and chrome only
-  outputElement.scrollIntoView({ block: 'nearest' })
-})
-
-function outputCount(item?: AssetItem) {
-  const user_metadata = getOutputAssetMetadata(item?.user_metadata)
-  return user_metadata?.outputCount ?? 0
-}
-
-const outputsCache: Record<string, MaybeRef<ResultItemImpl[]>> = {}
-
-function flattenNodeOutput([nodeId, nodeOutput]: [
-  string | number,
-  NodeExecutionOutput
-]): ResultItemImpl[] {
-  const knownOutputs: Record<string, ResultItem[]> = {}
-  if (nodeOutput.audio) knownOutputs.audio = nodeOutput.audio
-  if (nodeOutput.images) knownOutputs.images = nodeOutput.images
-  if (nodeOutput.video) knownOutputs.video = nodeOutput.video
-  if (nodeOutput.gifs) knownOutputs.gifs = nodeOutput.gifs as ResultItem[]
-  if (nodeOutput['3d']) knownOutputs['3d'] = nodeOutput['3d'] as ResultItem[]
-
-  return Object.entries(knownOutputs).flatMap(([mediaType, outputs]) =>
-    outputs.map(
-      (output) => new ResultItemImpl({ ...output, mediaType, nodeId })
+  const sel = selectedValue.value
+  if (!sel) {
+    emit('updateSelection', { canShowPreview: true })
+    return
+  }
+  if (sel.kind === 'inProgress') {
+    const item = store.activeWorkflowInProgressItems.find(
+      (i) => i.id === sel.itemId
     )
-  )
+    if (!item || item.state === 'skeleton') {
+      emit('updateSelection', { canShowPreview: true, showSkeleton: true })
+    } else if (item.state === 'latent') {
+      emit('updateSelection', {
+        canShowPreview: true,
+        latentPreviewUrl: item.latentPreviewUrl
+      })
+    } else {
+      emit('updateSelection', {
+        output: item.output,
+        canShowPreview: true
+      })
+    }
+    return
+  }
+  const asset = outputs.media.value.find((a) => a.id === sel.assetId)
+  const output = asset ? allOutputs(asset)[sel.key] : undefined
+  const isFirst = outputs.media.value[0]?.id === sel.assetId
+  emit('updateSelection', {
+    asset,
+    output,
+    canShowPreview: isFirst
+  })
 }
 
-function allOutputs(item?: AssetItem): MaybeRef<ResultItemImpl[]> {
-  if (item?.id && outputsCache[item.id]) return outputsCache[item.id]
+watchEffect(doEmit)
 
-  const user_metadata = getOutputAssetMetadata(item?.user_metadata)
-  if (!user_metadata) return []
-  if (
-    user_metadata.allOutputs &&
-    user_metadata.outputCount &&
-    user_metadata.outputCount < user_metadata.allOutputs.length
-  )
-    return user_metadata.allOutputs
+// On load or workflow tab switch, select the most recent item.
+// Prefer in-progress items for this workflow, then history, skipping
+// the global pending slot which may belong to another workflow.
+watch(
+  () => workflowStore.activeWorkflow?.path,
+  (path) => {
+    if (!path) return
+    const inProgress = store.activeWorkflowInProgressItems
+    if (inProgress.length > 0) {
+      store.selectAsLatest(`slot:${inProgress[0].id}`)
+    } else if (hasOutputs.value) {
+      selectFirstHistory()
+    } else {
+      store.selectAsLatest(null)
+    }
+  },
+  { immediate: true }
+)
 
-  const outputRef = useAsyncState(
-    getJobDetail(user_metadata.jobId).then((jobDetail) => {
-      if (!jobDetail?.outputs) return []
-      return Object.entries(jobDetail.outputs).flatMap(flattenNodeOutput)
-    }),
-    []
-  ).state
-  outputsCache[item!.id] = outputRef
-  return outputRef
-}
-
-const selectedOutput = computed(() => {
-  const [index, key] = selectedIndex.value
-  if (index < 0) return undefined
-
-  return toValue(allOutputs(outputs.media.value[index]))[key]
-})
-
-watch([selectedIndex, selectedOutput], doEmit)
+// Keep history selection stable on media changes
 watch(
   () => outputs.media.value,
   (newAssets, oldAssets) => {
@@ -133,52 +177,69 @@ watch(
       (oldAssets.length === 0 && newAssets.length !== 1)
     )
       return
-    if (selectedIndex.value[0] <= 0) {
-      selectedIndex.value = [0, 0]
+
+    if (store.selectedId?.startsWith('slot:')) return
+
+    const sv = store.selectedId
+      ? selectionMap.value.get(store.selectedId)
+      : undefined
+
+    if (!sv || sv.kind !== 'history') {
+      if (hasOutputs.value) selectFirstHistory()
       return
     }
 
-    const oldId = toRaw(oldAssets[selectedIndex.value[0]]?.id)
-    const newIndex = toRaw(newAssets).findIndex((asset) => asset?.id === oldId)
-
-    if (newIndex === -1) selectedIndex.value = [0, 0]
-    else selectedIndex.value = [newIndex, selectedIndex.value[1]]
+    const wasFirst = sv.assetId === oldAssets[0]?.id
+    if (wasFirst || !newAssets.some((a) => a.id === sv.assetId)) {
+      if (hasOutputs.value) selectFirstHistory()
+    }
   }
 )
 
-function gotoNextOutput() {
-  const [index, key] = selectedIndex.value
-  if (index < 0 || key < 0) {
-    selectedIndex.value = [0, 0]
-    return
+const outputsRef = useTemplateRef('outputsRef')
+
+// Track scrollWidth so we can compensate when items are prepended on the left.
+let lastScrollWidth = 0
+useResizeObserver(outputsRef, () => {
+  lastScrollWidth = outputsRef.value?.scrollWidth ?? 0
+})
+watch(
+  () => visibleHistory.value[0]?.id,
+  () => {
+    const el = outputsRef.value
+    if (!el || el.scrollLeft === 0) {
+      lastScrollWidth = el?.scrollWidth ?? 0
+      return
+    }
+    nextTick(() => {
+      const delta = el.scrollWidth - lastScrollWidth
+      if (delta !== 0) el.scrollLeft += delta
+      lastScrollWidth = el.scrollWidth
+    })
   }
-  if (key + 1 < outputCount(outputs.media.value[index])) {
-    selectedIndex.value = [index, key + 1]
-    return
-  }
-  if (outputs.media.value[index + 1]) {
-    selectedIndex.value = [index + 1, 0]
-  }
-  //do nothing, no next output
+)
+
+useInfiniteScroll(outputsRef, outputs.loadMore, {
+  canLoadMore: () => outputs.hasMore.value
+})
+
+function navigateToAdjacent(direction: 1 | -1) {
+  const items = selectableItems.value
+  if (items.length === 0) return
+  const currentId = store.selectedId
+  const idx = currentId ? items.findIndex((i) => i.id === currentId) : -1
+  const nextIdx =
+    idx === -1 ? 0 : Math.max(0, Math.min(items.length - 1, idx + direction))
+  store.select(items[nextIdx].id)
+  nextTick(() => {
+    selectedItemEl.value?.scrollIntoView({
+      block: 'nearest',
+      inline: 'nearest'
+    })
+  })
 }
 
-function gotoPreviousOutput() {
-  const [index, key] = selectedIndex.value
-  if (key > 0) {
-    selectedIndex.value = [index, key - 1]
-    return
-  }
-
-  if (index > 0) {
-    const len = outputCount(outputs.media.value[index - 1])
-    selectedIndex.value = [index - 1, len - 1]
-    return
-  }
-
-  selectedIndex.value = [0, 0]
-}
-
-let pointer = new CanvasPointer(document.body)
+const pointer = new CanvasPointer(document.body)
 let scrollOffset = 0
 useEventListener(
   document.body,
@@ -189,26 +250,43 @@ useEventListener(
     e.stopPropagation()
 
     if (!pointer.isTrackpadGesture(e)) {
-      if (e.deltaY > 0) gotoNextOutput()
-      else gotoPreviousOutput()
+      if (e.deltaY > 0) navigateToAdjacent(1)
+      else navigateToAdjacent(-1)
       return
     }
     scrollOffset += e.deltaY
     while (scrollOffset >= 60) {
       scrollOffset -= 60
-      gotoNextOutput()
+      navigateToAdjacent(1)
     }
     while (scrollOffset <= -60) {
       scrollOffset += 60
-      gotoPreviousOutput()
+      navigateToAdjacent(-1)
     }
   },
   { capture: true, passive: false }
 )
 
+useEventListener(
+  outputsRef,
+  'wheel',
+  function (e: WheelEvent) {
+    if (e.ctrlKey || e.metaKey || e.deltaY === 0) return
+    e.preventDefault()
+    if (outputsRef.value) outputsRef.value.scrollLeft += e.deltaY
+  },
+  { passive: false }
+)
+
+const keyHandlers: Record<string, 1 | -1> = {
+  ArrowUp: -1,
+  ArrowDown: 1,
+  ArrowLeft: -1,
+  ArrowRight: 1
+}
 useEventListener(document.body, 'keydown', (e: KeyboardEvent) => {
   if (
-    (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') ||
+    !(e.key in keyHandlers) ||
     e.target instanceof HTMLTextAreaElement ||
     e.target instanceof HTMLInputElement
   )
@@ -216,85 +294,78 @@ useEventListener(document.body, 'keydown', (e: KeyboardEvent) => {
 
   e.preventDefault()
   e.stopPropagation()
-  if (e.key === 'ArrowDown') gotoNextOutput()
-  else gotoPreviousOutput()
+  navigateToAdjacent(keyHandlers[e.key])
 })
 </script>
 <template>
-  <article
-    ref="outputsRef"
-    data-testid="linear-outputs"
-    class="h-24 p-3 overflow-x-auto overflow-y-clip border-node-component-border flex items-center contain-size md:mx-15"
+  <div
+    role="group"
+    class="flex h-21 min-w-0 items-start justify-center px-4 py-3 pb-4"
   >
-    <section
-      v-if="
-        queueStore.runningTasks.length > 0 || queueStore.pendingTasks.length > 0
-      "
-      data-testid="linear-job"
-      class="py-3 h-24 aspect-square px-1 relative"
+    <div
+      v-if="queueCount > 0 || hasActiveContent"
+      class="flex h-15 shrink-0 items-start gap-0.5"
     >
-      <i
-        v-if="queueStore.runningTasks.length > 0"
-        class="icon-[lucide--loader-circle] size-full animate-spin"
+      <OutputHistoryActiveQueueItem
+        v-if="queueCount > 1 || queueStore.pendingTasks.length"
+        class="mr-3"
+        :queue-count="queueCount"
       />
-      <i v-else class="icon-[lucide--ellipsis] size-full animate-pulse" />
+
       <div
-        v-if="
-          queueStore.runningTasks.length + queueStore.pendingTasks.length > 1
-        "
-        class="absolute top-0 right-0 p-1 min-w-5 h-5 flex justify-center items-center rounded-full bg-primary-background text-text-primary"
-        v-text="queueStore.runningTasks.length + queueStore.pendingTasks.length"
-      />
-      <div class="absolute -bottom-1 w-full h-3 rounded-sm overflow-clip">
-        <div :class="progressBarContainerClass">
-          <div
-            :class="progressBarPrimaryClass"
-            :style="progressPercentStyle(totalPercent)"
-          />
-          <div
-            :class="progressBarSecondaryClass"
-            :style="progressPercentStyle(currentNodePercent)"
-          />
-        </div>
+        v-if="mayBeActiveWorkflowPending"
+        :ref="selectedRef('slot:pending')"
+        v-bind="itemAttrs('slot:pending')"
+        :class="itemClass"
+        @click="store.select('slot:pending')"
+      >
+        <OutputPreviewItem />
       </div>
-    </section>
-    <template v-for="(item, index) in outputs.media.value" :key="index">
-      <div class="border-border-subtle border-l first:border-none h-21 m-3" />
-      <template v-for="(output, key) in toValue(allOutputs(item))" :key>
-        <img
-          v-if="getMediaType(output) === 'images'"
-          :class="
-            cn(
-              'p-1 rounded-lg aspect-square object-cover h-20',
-              index === selectedIndex[0] &&
-                key === selectedIndex[1] &&
-                'border-2'
-            )
-          "
-          :data-output-index="index"
-          :src="output.url"
-          @click="selectedIndex = [index, key]"
+
+      <div
+        v-for="item in store.activeWorkflowInProgressItems"
+        :key="`${item.id}-${item.state}`"
+        :ref="selectedRef(`slot:${item.id}`)"
+        v-bind="itemAttrs(`slot:${item.id}`)"
+        :class="itemClass"
+        @click="store.select(`slot:${item.id}`)"
+      >
+        <OutputPreviewItem
+          v-if="item.state !== 'image' || !item.output"
+          :latent-preview="item.latentPreviewUrl"
         />
-        <div
-          v-else
-          :class="
-            cn(
-              'p-1 rounded-lg aspect-square w-full',
-              index === selectedIndex[0] &&
-                key === selectedIndex[1] &&
-                'border-2'
-            )
-          "
-          :data-output-index="index"
-          @click="selectedIndex = [index, key]"
-        >
-          <i
-            :class="
-              cn(mediaTypes[getMediaType(output)]?.iconClass, 'size-full')
-            "
+        <OutputHistoryItem v-else :output="item.output" />
+      </div>
+
+      <div
+        v-if="hasActiveContent && visibleHistory.length > 0"
+        class="mx-4 h-12 shrink-0 border-l border-border-default"
+      />
+    </div>
+
+    <article
+      ref="outputsRef"
+      data-testid="linear-outputs"
+      class="min-w-0 overflow-x-auto overflow-y-clip"
+    >
+      <div class="flex h-15 w-fit items-start gap-0.5">
+        <template v-for="(asset, aIdx) in visibleHistory" :key="asset.id">
+          <div
+            v-if="aIdx > 0"
+            class="mx-4 h-12 shrink-0 border-l border-border-default"
           />
-        </div>
-      </template>
-    </template>
-  </article>
+          <div
+            v-for="(output, key) in toValue(allOutputs(asset))"
+            :key
+            :ref="selectedRef(`history:${asset.id}:${key}`)"
+            v-bind="itemAttrs(`history:${asset.id}:${key}`)"
+            :class="itemClass"
+            @click="store.select(`history:${asset.id}:${key}`)"
+          >
+            <OutputHistoryItem :output="output" />
+          </div>
+        </template>
+      </div>
+    </article>
+  </div>
 </template>

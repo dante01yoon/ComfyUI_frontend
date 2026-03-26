@@ -696,8 +696,7 @@
         "tooltip": "حداکثر تعداد تصاویری که هنگام فعال بودن تولید ترتیبی تصویر (auto) تولید می‌شود. مجموع تصاویر (ورودی + تولید شده) نباید از ۱۵ بیشتر باشد."
       },
       "model": {
-        "name": "مدل",
-        "tooltip": "نام مدل"
+        "name": "مدل"
       },
       "prompt": {
         "name": "پرامپت",
@@ -1420,6 +1419,41 @@
       }
     }
   },
+  "ComfyMathExpression": {
+    "display_name": "عبارت ریاضی",
+    "inputs": {
+      "expression": {
+        "name": "عبارت"
+      },
+      "values": {
+        "name": "مقادیر"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      },
+      "1": {
+        "tooltip": null
+      }
+    }
+  },
+  "ComfyNumberConvert": {
+    "display_name": "تبدیل عدد",
+    "inputs": {
+      "value": {
+        "name": "مقدار"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      },
+      "1": {
+        "tooltip": null
+      }
+    }
+  },
   "ComfySwitchNode": {
     "display_name": "سوئیچ",
     "inputs": {
@@ -1718,6 +1752,10 @@
         "name": "حلقه بسته",
         "tooltip": "آیا حلقه پنجره زمینه بسته شود؛ فقط برای برنامه‌ریزی حلقه‌ای قابل استفاده است."
       },
+      "cond_retain_index_list": {
+        "name": "cond_retain_index_list",
+        "tooltip": "فهرست اندیس‌های latent که باید در تنسورهای شرطی برای هر پنجره حفظ شوند؛ برای مثال، اگر این مقدار را '۰' قرار دهید، تصویر ابتدایی برای هر پنجره استفاده خواهد شد."
+      },
       "context_length": {
         "name": "طول پنجره زمینه",
         "tooltip": "طول پنجره زمینه."
@@ -1749,6 +1787,10 @@
       "model": {
         "name": "مدل",
         "tooltip": "مدلی که پنجره‌های زمینه هنگام نمونه‌گیری بر آن اعمال می‌شود."
+      },
+      "split_conds_to_windows": {
+        "name": "split_conds_to_windows",
+        "tooltip": "آیا شرط‌های متعدد (ایجاد شده توسط ConditionCombine) بر اساس اندیس ناحیه به هر پنجره تقسیم شوند یا خیر."
       }
     },
     "outputs": {
@@ -2138,6 +2180,35 @@
       }
     }
   },
+  "CropByBBoxes": {
+    "description": "برش و تغییر اندازه نواحی از دسته تصویر ورودی بر اساس جعبه‌های مرزی ارائه‌شده.",
+    "display_name": "CropByBBoxes",
+    "inputs": {
+      "bboxes": {
+        "name": "جعبه‌های مرزی"
+      },
+      "image": {
+        "name": "تصویر"
+      },
+      "output_height": {
+        "name": "ارتفاع خروجی",
+        "tooltip": "ارتفاعی که هر برش به آن تغییر اندازه داده می‌شود."
+      },
+      "output_width": {
+        "name": "عرض خروجی",
+        "tooltip": "عرضی که هر برش به آن تغییر اندازه داده می‌شود."
+      },
+      "padding": {
+        "name": "حاشیه",
+        "tooltip": "حاشیه اضافی (بر حسب پیکسل) که به هر طرف جعبه مرزی قبل از برش اضافه می‌شود."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": "تمام برش‌ها به صورت یک دسته تصویر واحد جمع‌آوری شده‌اند."
+      }
+    }
+  },
   "CropMask": {
     "display_name": "برش Mask",
     "inputs": {
@@ -2163,6 +2234,23 @@
       }
     }
   },
+  "CurveEditor": {
+    "display_name": "ویرایشگر منحنی",
+    "inputs": {
+      "curve": {
+        "name": "منحنی"
+      },
+      "histogram": {
+        "name": "هیستوگرام"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "منحنی",
+        "tooltip": null
+      }
+    }
+  },
   "CustomCombo": {
     "display_name": "ترکیب سفارشی",
     "inputs": {
@@ -2173,6 +2261,9 @@
       "option1": {}
     },
     "outputs": {
+      "0": {
+        "tooltip": null
+      },
       "1": {
         "name": "INDEX",
         "tooltip": null
@@ -2299,6 +2390,304 @@
     "outputs": {
       "0": {
         "tooltip": "مدل با EasyCache."
+      }
+    }
+  },
+  "ElevenLabsAudioIsolation": {
+    "description": "حذف نویز پس‌زمینه از صدا و ایزوله‌کردن گفتار یا آواز.",
+    "display_name": "ایزوله‌سازی صدای ElevenLabs",
+    "inputs": {
+      "audio": {
+        "name": "audio",
+        "tooltip": "صدایی که باید نویز پس‌زمینه از آن حذف شود."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsInstantVoiceClone": {
+    "description": "ایجاد یک صدای شبیه‌سازی‌شده از نمونه‌های صوتی. بین ۱ تا ۸ نمونه صدای مورد نظر را ارائه دهید.",
+    "display_name": "شبیه‌سازی فوری صدا ElevenLabs",
+    "inputs": {
+      "files": {
+        "name": "files",
+        "tooltip": "نمونه‌های صوتی برای شبیه‌سازی صدا."
+      },
+      "remove_background_noise": {
+        "name": "remove_background_noise",
+        "tooltip": "حذف نویز پس‌زمینه از نمونه‌های صوتی با استفاده از ایزوله‌سازی صدا."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "voice",
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsSpeechToSpeech": {
+    "description": "تبدیل گفتار از یک صدا به صدای دیگر با حفظ محتوای اصلی و احساسات.",
+    "display_name": "تبدیل گفتار به گفتار ElevenLabs",
+    "inputs": {
+      "audio": {
+        "name": "audio",
+        "tooltip": "صدای منبع برای تبدیل."
+      },
+      "control_after_generate": {
+        "name": "control after generate"
+      },
+      "model": {
+        "name": "model",
+        "tooltip": "مدل مورد استفاده برای تبدیل گفتار به گفتار."
+      },
+      "model_similarity_boost": {
+        "name": "similarity_boost"
+      },
+      "model_speed": {
+        "name": "speed"
+      },
+      "model_style": {
+        "name": "style"
+      },
+      "model_use_speaker_boost": {
+        "name": "use_speaker_boost"
+      },
+      "output_format": {
+        "name": "output_format",
+        "tooltip": "فرمت خروجی صدا."
+      },
+      "remove_background_noise": {
+        "name": "remove_background_noise",
+        "tooltip": "حذف نویز پس‌زمینه از صدای ورودی با استفاده از ایزوله‌سازی صدا."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "بذر برای تکرارپذیری."
+      },
+      "stability": {
+        "name": "stability",
+        "tooltip": "پایداری صدا. مقادیر کمتر دامنه احساسی بیشتری ایجاد می‌کند، مقادیر بالاتر صدایی یکنواخت‌تر اما احتمالاً یکنواخت و بدون تنوع تولید می‌کند."
+      },
+      "voice": {
+        "name": "voice",
+        "tooltip": "صدای هدف برای تبدیل. از Voice Selector یا Instant Voice Clone متصل کنید."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsSpeechToText": {
+    "description": "تبدیل صوت به متن. پشتیبانی از شناسایی خودکار زبان، تشخیص گوینده و برچسب‌گذاری رویدادهای صوتی.",
+    "display_name": "تبدیل گفتار به متن ElevenLabs",
+    "inputs": {
+      "audio": {
+        "name": "audio",
+        "tooltip": "فایل صوتی برای تبدیل به متن."
+      },
+      "control_after_generate": {
+        "name": "control after generate"
+      },
+      "language_code": {
+        "name": "language_code",
+        "tooltip": "کد زبان بر اساس ISO-639-1 یا ISO-639-3 (مثلاً 'en'، 'es'، 'fra'). برای شناسایی خودکار خالی بگذارید."
+      },
+      "model": {
+        "name": "model",
+        "tooltip": "مدل مورد استفاده برای تبدیل گفتار به متن."
+      },
+      "model_diarization_threshold": {
+        "name": "diarization_threshold"
+      },
+      "model_diarize": {
+        "name": "diarize"
+      },
+      "model_tag_audio_events": {
+        "name": "tag_audio_events"
+      },
+      "model_temperature": {
+        "name": "temperature"
+      },
+      "model_timestamps_granularity": {
+        "name": "timestamps_granularity"
+      },
+      "num_speakers": {
+        "name": "num_speakers",
+        "tooltip": "حداکثر تعداد گویندگان برای پیش‌بینی. برای شناسایی خودکار روی ۰ تنظیم کنید."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "مقدار seed برای بازتولیدپذیری (تضمین قطعی بودن وجود ندارد)."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "text",
+        "tooltip": null
+      },
+      "1": {
+        "name": "language_code",
+        "tooltip": null
+      },
+      "2": {
+        "name": "words_json",
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsTextToDialogue": {
+    "description": "تولید دیالوگ چند گوینده از متن. هر ورودی دیالوگ متن و صدای مخصوص به خود را دارد.",
+    "display_name": "تبدیل متن به دیالوگ ElevenLabs",
+    "inputs": {
+      "apply_text_normalization": {
+        "name": "apply_text_normalization",
+        "tooltip": "حالت نرمال‌سازی متن. 'auto' تصمیم را به سیستم می‌سپارد، 'on' همیشه نرمال‌سازی را اعمال می‌کند، 'off' آن را نادیده می‌گیرد."
+      },
+      "control_after_generate": {
+        "name": "control after generate"
+      },
+      "inputs": {
+        "name": "inputs",
+        "tooltip": "تعداد ورودی‌های دیالوگ."
+      },
+      "inputs_text1": {
+        "name": "text1"
+      },
+      "language_code": {
+        "name": "language_code",
+        "tooltip": "کد زبان بر اساس ISO-639-1 یا ISO-639-3 (مثلاً 'en'، 'es'، 'fra'). برای شناسایی خودکار خالی بگذارید."
+      },
+      "model": {
+        "name": "model",
+        "tooltip": "مدل مورد استفاده برای تولید دیالوگ."
+      },
+      "output_format": {
+        "name": "output_format",
+        "tooltip": "فرمت خروجی صوتی."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "مقدار seed برای بازتولیدپذیری."
+      },
+      "stability": {
+        "name": "stability",
+        "tooltip": "پایداری صدا. مقادیر کمتر دامنه احساسی بیشتری ایجاد می‌کند، مقادیر بالاتر صدای یکنواخت‌تر اما با ثبات بیشتر تولید می‌کند."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsTextToSoundEffects": {
+    "description": "تولید افکت صوتی از توضیحات متنی.",
+    "display_name": "تبدیل متن به افکت صوتی ElevenLabs",
+    "inputs": {
+      "model": {
+        "name": "model",
+        "tooltip": "مدل مورد استفاده برای تولید افکت صوتی."
+      },
+      "model_duration": {
+        "name": "duration"
+      },
+      "model_loop": {
+        "name": "loop"
+      },
+      "model_prompt_influence": {
+        "name": "prompt_influence"
+      },
+      "output_format": {
+        "name": "output_format",
+        "tooltip": "فرمت خروجی صوتی."
+      },
+      "text": {
+        "name": "text",
+        "tooltip": "توضیح متنی افکت صوتی مورد نظر برای تولید."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsTextToSpeech": {
+    "description": "تبدیل متن به گفتار.",
+    "display_name": "تبدیل متن به گفتار ElevenLabs",
+    "inputs": {
+      "apply_text_normalization": {
+        "name": "apply_text_normalization",
+        "tooltip": "حالت نرمال‌سازی متن. 'auto' اجازه می‌دهد سیستم تصمیم بگیرد، 'on' همیشه نرمال‌سازی را اعمال می‌کند، 'off' آن را نادیده می‌گیرد."
+      },
+      "control_after_generate": {
+        "name": "control after generate"
+      },
+      "language_code": {
+        "name": "language_code",
+        "tooltip": "کد زبان ISO-639-1 یا ISO-639-3 (مثلاً 'en'، 'es'، 'fra'). برای تشخیص خودکار خالی بگذارید."
+      },
+      "model": {
+        "name": "model",
+        "tooltip": "مدلی که برای تبدیل متن به گفتار استفاده می‌شود."
+      },
+      "model_similarity_boost": {
+        "name": "similarity_boost"
+      },
+      "model_speed": {
+        "name": "speed"
+      },
+      "model_style": {
+        "name": "style"
+      },
+      "model_use_speaker_boost": {
+        "name": "use_speaker_boost"
+      },
+      "output_format": {
+        "name": "output_format",
+        "tooltip": "فرمت خروجی صوتی."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "بذر برای بازتولیدپذیری (تعیین‌پذیری تضمین نمی‌شود)."
+      },
+      "stability": {
+        "name": "stability",
+        "tooltip": "پایداری صدا. مقادیر کمتر دامنه احساسی بیشتری ایجاد می‌کند، مقادیر بالاتر صدایی یکنواخت‌تر اما احتمالاً یکنواخت‌تر تولید می‌کند."
+      },
+      "text": {
+        "name": "text",
+        "tooltip": "متنی که باید به گفتار تبدیل شود."
+      },
+      "voice": {
+        "name": "voice",
+        "tooltip": "صدایی که برای سنتز گفتار استفاده می‌شود. از Voice Selector یا Instant Voice Clone متصل کنید."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ElevenLabsVoiceSelector": {
+    "description": "انتخاب یک صدای از پیش تعریف‌شده ElevenLabs برای تولید گفتار از متن.",
+    "display_name": "انتخاب صدای ElevenLabs",
+    "inputs": {
+      "voice": {
+        "name": "voice",
+        "tooltip": "یک صدا از صداهای از پیش تعریف‌شده ElevenLabs انتخاب کنید."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "voice",
+        "tooltip": null
       }
     }
   },
@@ -2859,6 +3248,21 @@
       }
     }
   },
+  "FluxKVCache": {
+    "description": "بهینه‌سازی KV Cache را برای تصاویر مرجع در مدل‌های خانواده Flux فعال می‌کند.",
+    "display_name": "Flux KV Cache",
+    "inputs": {
+      "model": {
+        "name": "مدل",
+        "tooltip": "مدلی که قرار است KV Cache روی آن فعال شود."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": "مدل اصلاح‌شده با KV Cache فعال."
+      }
+    }
+  },
   "FluxKontextImageScale": {
     "description": "این نود تصویر را به اندازه‌ای تغییر می‌دهد که برای flux kontext بهینه‌تر باشد.",
     "display_name": "FluxKontextImageScale",
@@ -3237,6 +3641,50 @@
       }
     }
   },
+  "GLSLShader": {
+    "description": "اعمال شیدرهای fragment GLSL ES به تصاویر. u_resolution (vec2) همیشه در دسترس است.",
+    "display_name": "GLSL Shader",
+    "inputs": {
+      "floats": {
+        "name": "floats",
+        "tooltip": "اعداد اعشاری به صورت u_float0-4 در کد شیدر در دسترس هستند"
+      },
+      "fragment_shader": {
+        "name": "fragment_shader",
+        "tooltip": "کد منبع شیدر fragment GLSL (سازگار با GLSL ES 3.00 / WebGL 2.0)"
+      },
+      "images": {
+        "name": "images",
+        "tooltip": "تصاویر به صورت u_image0-4 (sampler2D) در کد شیدر در دسترس هستند"
+      },
+      "ints": {
+        "name": "ints",
+        "tooltip": "اعداد صحیح به صورت u_int0-4 در کد شیدر در دسترس هستند"
+      },
+      "size_mode": {
+        "name": "size_mode",
+        "tooltip": "اندازه خروجی: 'from_input' ابعاد اولین تصویر ورودی را استفاده می‌کند، 'custom' اجازه تعیین دستی اندازه را می‌دهد"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "IMAGE0",
+        "tooltip": "از طریق layout(location = 0) out vec4 fragColor0 در کد شیدر در دسترس است"
+      },
+      "1": {
+        "name": "IMAGE1",
+        "tooltip": "از طریق layout(location = 1) out vec4 fragColor1 در کد شیدر در دسترس است"
+      },
+      "2": {
+        "name": "IMAGE2",
+        "tooltip": "از طریق layout(location = 2) out vec4 fragColor2 در کد شیدر در دسترس است"
+      },
+      "3": {
+        "name": "IMAGE3",
+        "tooltip": "از طریق layout(location = 3) out vec4 fragColor3 در کد شیدر در دسترس است"
+      }
+    }
+  },
   "GeminiImage2Node": {
     "description": "تولید یا ویرایش تصاویر به صورت همزمان از طریق Google Vertex API.",
     "display_name": "Nano Banana Pro (Google Gemini Image)",
@@ -3354,6 +3802,64 @@
     "outputs": {
       "0": {
         "tooltip": null
+      }
+    }
+  },
+  "GeminiNanoBanana2": {
+    "description": "تولید یا ویرایش تصاویر به صورت همزمان از طریق Google Vertex API.",
+    "display_name": "Nano Banana ۲",
+    "inputs": {
+      "aspect_ratio": {
+        "name": "نسبت تصویر",
+        "tooltip": "اگر روی 'auto' تنظیم شود، با نسبت تصویر ورودی شما مطابقت دارد؛ اگر تصویری ارائه نشود، معمولاً یک مربع با نسبت ۱۶:۹ تولید می‌شود."
+      },
+      "control_after_generate": {
+        "name": "کنترل پس از تولید"
+      },
+      "files": {
+        "name": "فایل‌ها",
+        "tooltip": "فایل(های) اختیاری برای استفاده به عنوان زمینه برای مدل. ورودی‌ها را از node Gemini Generate Content Input Files می‌پذیرد."
+      },
+      "images": {
+        "name": "تصاویر",
+        "tooltip": "تصویر(های) مرجع اختیاری. برای افزودن چند تصویر، از node Batch Images استفاده کنید (تا ۱۴ تصویر)."
+      },
+      "model": {
+        "name": "مدل"
+      },
+      "prompt": {
+        "name": "پرامپت",
+        "tooltip": "توضیح متنی درباره تصویری که باید تولید شود یا ویرایش‌هایی که باید اعمال گردد. هرگونه محدودیت، سبک یا جزئیاتی که مدل باید رعایت کند را وارد کنید."
+      },
+      "resolution": {
+        "name": "وضوح تصویر",
+        "tooltip": "وضوح خروجی هدف. برای ۲K/۴K از upscaler بومی Gemini استفاده می‌شود."
+      },
+      "response_modalities": {
+        "name": "حالت‌های پاسخ"
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "زمانی که مقدار seed ثابت باشد، مدل تلاش می‌کند تا پاسخ مشابهی برای درخواست‌های تکراری ارائه دهد. خروجی قطعی تضمین نمی‌شود. همچنین، تغییر مدل یا تنظیمات پارامترها مانند دما (temperature) می‌تواند باعث تغییر در پاسخ حتی با همان مقدار seed شود. به طور پیش‌فرض، مقدار seed به صورت تصادفی انتخاب می‌شود."
+      },
+      "system_prompt": {
+        "name": "پرامپت سیستمی",
+        "tooltip": "دستورالعمل‌های پایه‌ای که رفتار هوش مصنوعی را تعیین می‌کند."
+      },
+      "thinking_level": {
+        "name": "سطح تفکر"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      },
+      "1": {
+        "tooltip": null
+      },
+      "2": {
+        "name": "thought_image",
+        "tooltip": "اولین تصویر از فرایند تفکر مدل. فقط در حالت thinking_level بالا و مدالیته IMAGE+TEXT در دسترس است."
       }
     }
   },
@@ -3520,6 +4026,10 @@
     "description": "ویرایش یک تصویر موجود بر اساس یک متن راهنما",
     "display_name": "ویرایش تصویر Grok",
     "inputs": {
+      "aspect_ratio": {
+        "name": "نسبت تصویر",
+        "tooltip": "فقط زمانی مجاز است که چندین تصویر به ورودی تصویر متصل باشند."
+      },
       "control_after_generate": {
         "name": "کنترل پس از تولید"
       },
@@ -3572,6 +4082,9 @@
         "name": "راهنما",
         "tooltip": "متن راهنما برای تولید تصویر استفاده می‌شود"
       },
+      "resolution": {
+        "name": "وضوح"
+      },
       "seed": {
         "name": "بذر",
         "tooltip": "بذر برای تعیین اینکه node باید دوباره اجرا شود؛ نتایج واقعی صرف‌نظر از بذر غیرقطعی هستند."
@@ -3612,6 +4125,39 @@
       }
     }
   },
+  "GrokVideoExtendNode": {
+    "description": "گسترش یک ویدیوی موجود با ادامه‌ای یکپارچه بر اساس یک متن راهنما.",
+    "display_name": "گسترش ویدیو Grok",
+    "inputs": {
+      "control_after_generate": {
+        "name": "کنترل پس از تولید"
+      },
+      "model": {
+        "name": "مدل",
+        "tooltip": "مدلی که برای گسترش ویدیو استفاده می‌شود."
+      },
+      "model_duration": {
+        "name": "مدت زمان"
+      },
+      "prompt": {
+        "name": "راهنمای متنی",
+        "tooltip": "توضیح متنی درباره آنچه باید در ادامه ویدیو رخ دهد."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "seed برای تعیین اینکه node باید دوباره اجرا شود یا خیر؛ نتایج واقعی صرف‌نظر از seed غیرقطعی هستند."
+      },
+      "video": {
+        "name": "ویدیو",
+        "tooltip": "ویدیوی منبع برای گسترش. فرمت MP4، بین ۲ تا ۱۵ ثانیه."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
   "GrokVideoNode": {
     "description": "تولید ویدیو از یک راهنما یا تصویر",
     "display_name": "ویدیو Grok",
@@ -3644,6 +4190,41 @@
       "seed": {
         "name": "بذر",
         "tooltip": "بذر برای تعیین اینکه node باید دوباره اجرا شود؛ نتایج واقعی صرف‌نظر از بذر غیرقطعی هستند."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "GrokVideoReferenceNode": {
+    "description": "تولید ویدیو با راهنمایی تصاویر مرجع به عنوان سبک و محتوا.",
+    "display_name": "تولید ویدیو با مرجع Grok",
+    "inputs": {
+      "control_after_generate": {
+        "name": "کنترل پس از تولید"
+      },
+      "model": {
+        "name": "مدل",
+        "tooltip": "مدلی که برای تولید ویدیو استفاده می‌شود."
+      },
+      "model_aspect_ratio": {
+        "name": "نسبت تصویر"
+      },
+      "model_duration": {
+        "name": "مدت زمان"
+      },
+      "model_resolution": {
+        "name": "وضوح"
+      },
+      "prompt": {
+        "name": "راهنمای متنی",
+        "tooltip": "توضیح متنی درباره ویدیوی مورد نظر."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "seed برای تعیین اینکه node باید دوباره اجرا شود یا خیر؛ نتایج واقعی صرف‌نظر از seed غیرقطعی هستند."
       }
     },
     "outputs": {
@@ -4404,6 +4985,28 @@
       }
     }
   },
+  "ImageMergeTileList": {
+    "display_name": "ادغام فهرست کاشی‌ها به تصویر",
+    "inputs": {
+      "final_height": {
+        "name": "final_height"
+      },
+      "final_width": {
+        "name": "final_width"
+      },
+      "image_list": {
+        "name": "image_list"
+      },
+      "overlap": {
+        "name": "overlap"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
   "ImageOnlyCheckpointLoader": {
     "display_name": "بارگذاری Checkpoint فقط تصویر (مدل img2vid)",
     "inputs": {
@@ -4982,6 +5585,39 @@
       }
     }
   },
+  "KlingAvatarNode": {
+    "description": "تولید ویدئوهای دیجیتال انسان به سبک پخش زنده از یک عکس و یک فایل صوتی.",
+    "display_name": "Kling Avatar 2.0",
+    "inputs": {
+      "control_after_generate": {
+        "name": "کنترل پس از تولید"
+      },
+      "image": {
+        "name": "image",
+        "tooltip": "تصویر مرجع آواتار. عرض و ارتفاع باید حداقل ۳۰۰ پیکسل باشد. نسبت ابعاد باید بین ۱:۲.۵ و ۲.۵:۱ باشد."
+      },
+      "mode": {
+        "name": "mode"
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "پرومپت اختیاری برای تعریف حرکات، احساسات و حرکات دوربین آواتار."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Seed تعیین می‌کند که آیا node باید دوباره اجرا شود؛ نتایج صرف‌نظر از seed غیرقطعی هستند."
+      },
+      "sound_file": {
+        "name": "sound_file",
+        "tooltip": "ورودی صوتی. مدت زمان باید بین ۲ تا ۳۰۰ ثانیه باشد."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
   "KlingCameraControlI2VNode": {
     "description": "تبدیل تصاویر ثابت به ویدیوهای سینمایی با حرکات حرفه‌ای دوربین که شبیه‌ساز فیلم‌برداری واقعی است. کنترل حرکات مجازی دوربین شامل زوم، چرخش، پن، تیلت و نمای اول شخص، در حالی که تمرکز بر تصویر اصلی شما حفظ می‌شود.",
     "display_name": "تبدیل تصویر به ویدیو Kling (کنترل دوربین)",
@@ -5371,6 +6007,9 @@
       },
       "mode": {
         "name": "حالت"
+      },
+      "model": {
+        "name": "مدل"
       },
       "prompt": {
         "name": "پرامپت"
@@ -6210,6 +6849,54 @@
       }
     }
   },
+  "LTXVReferenceAudio": {
+    "description": "تنظیم صدای مرجع برای انتقال هویت گوینده با استفاده از ID-LoRA. یک کلیپ صوتی مرجع را به صورت شرطی رمزگذاری می‌کند و در صورت نیاز مدل را با راهنمایی هویتی (یک عبور اضافی بدون مرجع برای تقویت اثر هویت گوینده) اصلاح می‌کند.",
+    "display_name": "LTXV Reference Audio (ID-LoRA)",
+    "inputs": {
+      "audio_vae": {
+        "name": "audio_vae",
+        "tooltip": "LTXV Audio VAE برای رمزگذاری."
+      },
+      "end_percent": {
+        "name": "end_percent",
+        "tooltip": "پایان بازه سیگما که راهنمایی هویتی در آن فعال است."
+      },
+      "identity_guidance_scale": {
+        "name": "identity_guidance_scale",
+        "tooltip": "شدت راهنمایی هویتی. در هر مرحله یک عبور اضافی بدون مرجع اجرا می‌شود تا هویت گوینده تقویت شود. برای غیرفعال کردن، مقدار را روی ۰ قرار دهید (بدون عبور اضافی)."
+      },
+      "model": {
+        "name": "مدل"
+      },
+      "negative": {
+        "name": "منفی"
+      },
+      "positive": {
+        "name": "مثبت"
+      },
+      "reference_audio": {
+        "name": "reference_audio",
+        "tooltip": "کلیپ صوتی مرجع که هویت گوینده آن منتقل می‌شود. مدت زمان پیشنهادی حدود ۵ ثانیه (مدت زمان آموزش). کلیپ‌های کوتاه‌تر یا بلندتر ممکن است کیفیت انتقال هویت صدا را کاهش دهند."
+      },
+      "start_percent": {
+        "name": "start_percent",
+        "tooltip": "آغاز بازه سیگما که راهنمایی هویتی در آن فعال است."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      },
+      "1": {
+        "name": "مثبت",
+        "tooltip": null
+      },
+      "2": {
+        "name": "منفی",
+        "tooltip": null
+      }
+    }
+  },
   "LTXVScheduler": {
     "display_name": "LTXVScheduler",
     "inputs": {
@@ -6723,6 +7410,30 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "تصویر",
+        "tooltip": null
+      },
+      "1": {
+        "name": "ماسک",
+        "tooltip": null
+      },
+      "2": {
+        "name": "مسیر مش",
+        "tooltip": null
+      },
+      "3": {
+        "name": "نرمال",
+        "tooltip": null
+      },
+      "4": {
+        "name": "اطلاعات دوربین",
+        "tooltip": null
+      },
+      "5": {
+        "name": "ویدئوی ضبط‌شده",
+        "tooltip": null
+      },
       "6": {
         "name": "مدل_۳بعدی",
         "tooltip": null
@@ -7675,6 +8386,10 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
@@ -7730,6 +8445,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
+      "1": {
+        "name": "شناسه وظیفه meshy",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -7785,6 +8508,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
+      "1": {
+        "name": "شناسه وظیفه meshy",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -7819,6 +8550,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
+      "1": {
+        "name": "شناسه وظیفه meshy",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -7846,6 +8585,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
+      "1": {
+        "name": "شناسه وظیفه rig",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -7894,6 +8641,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
+      "1": {
+        "name": "شناسه وظیفه meshy",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -7930,6 +8685,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
+      "1": {
+        "name": "شناسه وظیفه meshy",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -10704,6 +11467,35 @@
       }
     }
   },
+  "Painter": {
+    "display_name": "نقاش",
+    "inputs": {
+      "bg_color": {
+        "name": "رنگ پس‌زمینه"
+      },
+      "height": {
+        "name": "ارتفاع"
+      },
+      "image": {
+        "name": "تصویر",
+        "tooltip": "تصویر پایه اختیاری برای نقاشی روی آن"
+      },
+      "mask": {
+        "name": "mask"
+      },
+      "width": {
+        "name": "عرض"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      },
+      "1": {
+        "tooltip": null
+      }
+    }
+  },
   "PairConditioningCombine": {
     "display_name": "ترکیب جفت شرطی",
     "inputs": {
@@ -11310,6 +12102,91 @@
       },
       "clip_name4": {
         "name": "clip_name4"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "QuiverImageToSVGNode": {
+    "description": "بردارسازی یک تصویر شطرنجی به SVG با استفاده از Quiver AI.",
+    "display_name": "تبدیل تصویر Quiver به SVG",
+    "inputs": {
+      "auto_crop": {
+        "name": "auto_crop",
+        "tooltip": "برش خودکار به سوژه غالب."
+      },
+      "control_after_generate": {
+        "name": "control after generate"
+      },
+      "image": {
+        "name": "image",
+        "tooltip": "تصویر ورودی برای بردارسازی."
+      },
+      "model": {
+        "name": "model",
+        "tooltip": "مدل مورد استفاده برای بردارسازی SVG."
+      },
+      "model_presence_penalty": {
+        "name": "presence_penalty"
+      },
+      "model_target_size": {
+        "name": "target_size"
+      },
+      "model_temperature": {
+        "name": "temperature"
+      },
+      "model_top_p": {
+        "name": "top_p"
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Seed برای تعیین اجرای مجدد node؛ نتایج واقعی صرف‌نظر از seed غیرقطعی هستند."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "QuiverTextToSVGNode": {
+    "description": "تولید یک SVG از طریق پرامپت متنی با استفاده از Quiver AI.",
+    "display_name": "تبدیل متن Quiver به SVG",
+    "inputs": {
+      "control_after_generate": {
+        "name": "control after generate"
+      },
+      "instructions": {
+        "name": "instructions",
+        "tooltip": "راهنمایی‌های اضافی برای سبک یا قالب‌بندی."
+      },
+      "model": {
+        "name": "model",
+        "tooltip": "مدل مورد استفاده برای تولید SVG."
+      },
+      "model_presence_penalty": {
+        "name": "presence_penalty"
+      },
+      "model_temperature": {
+        "name": "temperature"
+      },
+      "model_top_p": {
+        "name": "top_p"
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "توضیح متنی برای خروجی SVG مورد نظر."
+      },
+      "reference_images": {
+        "name": "reference_images",
+        "tooltip": "حداکثر ۴ تصویر مرجع برای راهنمایی تولید."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Seed برای تعیین اجرای مجدد node؛ نتایج واقعی صرف‌نظر از seed غیرقطعی هستند."
       }
     },
     "outputs": {
@@ -12244,6 +13121,157 @@
       }
     }
   },
+  "ResolutionSelector": {
+    "description": "محاسبه عرض و ارتفاع بر اساس نسبت تصویر و هدف مگاپیکسل. مناسب برای تعیین ابعاد تصویر نهفته خالی.",
+    "display_name": "انتخابگر وضوح",
+    "inputs": {
+      "aspect_ratio": {
+        "name": "نسبت تصویر",
+        "tooltip": "نسبت تصویر برای ابعاد خروجی."
+      },
+      "megapixels": {
+        "name": "مگاپیکسل",
+        "tooltip": "هدف مجموع مگاپیکسل‌ها. ۱٫۰ مگاپیکسل ≈ ۱۰۲۴×۱۰۲۴ برای تصویر مربع."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "عرض",
+        "tooltip": "عرض محاسبه‌شده بر حسب پیکسل (مضربی از ۸)."
+      },
+      "1": {
+        "name": "ارتفاع",
+        "tooltip": "ارتفاع محاسبه‌شده بر حسب پیکسل (مضربی از ۸)."
+      }
+    }
+  },
+  "ReveImageCreateNode": {
+    "description": "تولید تصویر از توضیحات متنی با استفاده از Reve.",
+    "display_name": "ایجاد تصویر با Reve",
+    "inputs": {
+      "control_after_generate": {
+        "name": "کنترل پس از تولید"
+      },
+      "model": {
+        "name": "مدل",
+        "tooltip": "نسخه مدل مورد استفاده برای تولید."
+      },
+      "model_aspect_ratio": {
+        "name": "نسبت ابعاد"
+      },
+      "model_test_time_scaling": {
+        "name": "مقیاس‌دهی زمان تست"
+      },
+      "prompt": {
+        "name": "پرامپت",
+        "tooltip": "توضیح متنی تصویر مورد نظر. حداکثر ۲۵۶۰ کاراکتر."
+      },
+      "remove_background": {
+        "name": "حذف پس‌زمینه",
+        "tooltip": "حذف پس‌زمینه از تصویر تولید شده. ممکن است هزینه اضافی داشته باشد."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "seed تعیین می‌کند که node باید دوباره اجرا شود یا خیر؛ نتایج صرف‌نظر از seed غیرقطعی هستند."
+      },
+      "upscale": {
+        "name": "افزایش وضوح",
+        "tooltip": "افزایش وضوح تصویر تولید شده. ممکن است هزینه اضافی داشته باشد."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ReveImageEditNode": {
+    "description": "ویرایش تصاویر با استفاده از دستور زبان طبیعی در Reve.",
+    "display_name": "ویرایش تصویر با Reve",
+    "inputs": {
+      "control_after_generate": {
+        "name": "کنترل پس از تولید"
+      },
+      "edit_instruction": {
+        "name": "دستور ویرایش",
+        "tooltip": "توضیح متنی نحوه ویرایش تصویر. حداکثر ۲۵۶۰ کاراکتر."
+      },
+      "image": {
+        "name": "تصویر",
+        "tooltip": "تصویری که باید ویرایش شود."
+      },
+      "model": {
+        "name": "مدل",
+        "tooltip": "نسخه مدل مورد استفاده برای ویرایش."
+      },
+      "model_aspect_ratio": {
+        "name": "نسبت ابعاد"
+      },
+      "model_test_time_scaling": {
+        "name": "مقیاس‌دهی زمان تست"
+      },
+      "remove_background": {
+        "name": "حذف پس‌زمینه",
+        "tooltip": "حذف پس‌زمینه از تصویر تولید شده. ممکن است هزینه اضافی داشته باشد."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "seed تعیین می‌کند که node باید دوباره اجرا شود یا خیر؛ نتایج صرف‌نظر از seed غیرقطعی هستند."
+      },
+      "upscale": {
+        "name": "افزایش وضوح",
+        "tooltip": "افزایش وضوح تصویر تولید شده. ممکن است هزینه اضافی داشته باشد."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "ReveImageRemixNode": {
+    "description": "ترکیب تصاویر مرجع با پرامپت متنی برای ایجاد تصاویر جدید با استفاده از Reve.",
+    "display_name": "ترکیب تصویر با Reve",
+    "inputs": {
+      "control_after_generate": {
+        "name": "کنترل پس از تولید"
+      },
+      "model": {
+        "name": "مدل",
+        "tooltip": "نسخه مدل مورد استفاده برای ترکیب."
+      },
+      "model_aspect_ratio": {
+        "name": "نسبت ابعاد"
+      },
+      "model_test_time_scaling": {
+        "name": "مقیاس‌دهی زمان تست"
+      },
+      "prompt": {
+        "name": "پرامپت",
+        "tooltip": "توضیح متنی تصویر مورد نظر. می‌توانید از تگ XML img برای ارجاع به تصاویر خاص با شماره اندیس استفاده کنید، مانند <img>۰</img>، <img>۱</img> و غیره."
+      },
+      "reference_images": {
+        "name": "تصاویر مرجع"
+      },
+      "remove_background": {
+        "name": "حذف پس‌زمینه",
+        "tooltip": "حذف پس‌زمینه از تصویر تولید شده. ممکن است هزینه اضافی داشته باشد."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "seed تعیین می‌کند که node باید دوباره اجرا شود یا خیر؛ نتایج صرف‌نظر از seed غیرقطعی هستند."
+      },
+      "upscale": {
+        "name": "افزایش وضوح",
+        "tooltip": "افزایش وضوح تصویر تولید شده. ممکن است هزینه اضافی داشته باشد."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
   "Rodin3D_Detail": {
     "description": "تولید دارایی‌های سه‌بعدی با استفاده از Rodin API",
     "display_name": "Rodin 3D Generate - تولید جزئیات",
@@ -12262,6 +13290,10 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "مسیر مدل سه‌بعدی",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
@@ -12289,6 +13321,10 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "مسیر مدل سه‌بعدی",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
@@ -12313,6 +13349,10 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "مسیر مدل سه‌بعدی",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
@@ -12331,6 +13371,10 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "مسیر مدل سه‌بعدی",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
@@ -12355,6 +13399,10 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "مسیر مدل سه‌بعدی",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
@@ -12480,6 +13528,90 @@
     "outputs": {
       "0": {
         "tooltip": null
+      }
+    }
+  },
+  "SDPoseDrawKeypoints": {
+    "display_name": "SDPoseDrawKeypoints",
+    "inputs": {
+      "draw_body": {
+        "name": "ترسیم بدن"
+      },
+      "draw_face": {
+        "name": "ترسیم صورت"
+      },
+      "draw_feet": {
+        "name": "ترسیم پاها"
+      },
+      "draw_hands": {
+        "name": "ترسیم دست‌ها"
+      },
+      "face_point_size": {
+        "name": "اندازه نقطه صورت"
+      },
+      "keypoints": {
+        "name": "نقاط کلیدی"
+      },
+      "score_threshold": {
+        "name": "آستانه امتیاز"
+      },
+      "stick_width": {
+        "name": "ضخامت خط"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "SDPoseFaceBBoxes": {
+    "display_name": "SDPoseFaceBBoxes",
+    "inputs": {
+      "force_square": {
+        "name": "اجبار به مربع بودن",
+        "tooltip": "محور کوتاه‌تر جعبه مرزی را گسترش می‌دهد تا ناحیه برش همیشه مربع باشد."
+      },
+      "keypoints": {
+        "name": "نقاط کلیدی"
+      },
+      "scale": {
+        "name": "مقیاس",
+        "tooltip": "ضریب بزرگنمایی برای ناحیه جعبه مرزی اطراف هر صورت شناسایی‌شده."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "جعبه‌های مرزی",
+        "tooltip": "جعبه‌های مرزی صورت برای هر فریم، سازگار با ورودی bboxes در SDPoseKeypointExtractor."
+      }
+    }
+  },
+  "SDPoseKeypointExtractor": {
+    "description": "استخراج نقاط کلیدی ژست از تصاویر با استفاده از مدل SDPose: https://huggingface.co/Comfy-Org/SDPose/tree/main/checkpoints",
+    "display_name": "SDPoseKeypointExtractor",
+    "inputs": {
+      "batch_size": {
+        "name": "اندازه دسته"
+      },
+      "bboxes": {
+        "name": "جعبه‌های مرزی",
+        "tooltip": "جعبه‌های مرزی اختیاری برای تشخیص دقیق‌تر. برای تشخیص چند نفره الزامی است."
+      },
+      "image": {
+        "name": "تصویر"
+      },
+      "model": {
+        "name": "مدل"
+      },
+      "vae": {
+        "name": "vae"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "نقاط کلیدی",
+        "tooltip": "نقاط کلیدی در قالب قاب OpenPose (عرض بوم، ارتفاع بوم، افراد)"
       }
     }
   },
@@ -13561,6 +14693,29 @@
       }
     }
   },
+  "SplitImageToTileList": {
+    "description": "یک تصویر را به فهرستی دسته‌ای از کاشی‌ها با همپوشانی مشخص تقسیم می‌کند.",
+    "display_name": "تقسیم تصویر به فهرست کاشی‌ها",
+    "inputs": {
+      "image": {
+        "name": "image"
+      },
+      "overlap": {
+        "name": "overlap"
+      },
+      "tile_height": {
+        "name": "tile_height"
+      },
+      "tile_width": {
+        "name": "tile_width"
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": null
+      }
+    }
+  },
   "SplitImageWithAlpha": {
     "display_name": "تقسیم تصویر با آلفا",
     "inputs": {
@@ -14342,6 +15497,41 @@
       }
     }
   },
+  "Tencent3DTextureEditNode": {
+    "description": "پس از وارد کردن مدل سه‌بعدی، بازطراحی بافت مدل سه‌بعدی را انجام دهید.",
+    "display_name": "Hunyuan3D: ویرایش بافت سه‌بعدی",
+    "inputs": {
+      "control_after_generate": {
+        "name": "کنترل پس از تولید"
+      },
+      "model_3d": {
+        "name": "model_3d",
+        "tooltip": "مدل سه‌بعدی با فرمت FBX. مدل باید کمتر از ۱۰۰٬۰۰۰ وجه داشته باشد."
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "توضیح ویرایش بافت. تا ۱۰۲۴ نویسه UTF-8 پشتیبانی می‌شود."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "seed کنترل می‌کند که node دوباره اجرا شود یا خیر؛ نتایج صرف‌نظر از seed غیرقطعی هستند."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "GLB",
+        "tooltip": null
+      },
+      "1": {
+        "name": "OBJ",
+        "tooltip": null
+      },
+      "2": {
+        "name": "تصویر بافت",
+        "tooltip": null
+      }
+    }
+  },
   "TencentImageToModelNode": {
     "display_name": "Hunyuan3D: تبدیل تصویر(ها) به مدل (پیشرفته)",
     "inputs": {
@@ -14379,11 +15569,89 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
       },
       "2": {
+        "name": "OBJ",
+        "tooltip": null
+      },
+      "3": {
+        "name": "تصویر بافت",
+        "tooltip": null
+      },
+      "4": {
+        "name": "metallic اختیاری",
+        "tooltip": null
+      },
+      "5": {
+        "name": "normal اختیاری",
+        "tooltip": null
+      },
+      "6": {
+        "name": "roughness اختیاری",
+        "tooltip": null
+      }
+    }
+  },
+  "TencentModelTo3DUVNode": {
+    "description": "بازکردن UV روی یک مدل سه‌بعدی برای تولید بافت UV. مدل ورودی باید کمتر از ۳۰۰۰۰ وجه داشته باشد.",
+    "display_name": "Hunyuan3D: مدل به UV",
+    "inputs": {
+      "control_after_generate": {
+        "name": "کنترل پس از تولید"
+      },
+      "model_3d": {
+        "name": "مدل سه‌بعدی",
+        "tooltip": "مدل سه‌بعدی ورودی (GLB، OBJ یا FBX)"
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "seed تعیین می‌کند که node باید دوباره اجرا شود یا خیر؛ نتایج صرف‌نظر از seed غیرقطعی هستند."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "OBJ",
+        "tooltip": null
+      },
+      "1": {
+        "name": "FBX",
+        "tooltip": null
+      }
+    }
+  },
+  "TencentSmartTopologyNode": {
+    "description": "اجرای رتپولوژی هوشمند روی یک مدل سه‌بعدی. پشتیبانی از فرمت‌های GLB/OBJ؛ حداکثر ۲۰۰ مگابایت؛ توصیه‌شده برای مدل‌های با چندضلعی بالا.",
+    "display_name": "Hunyuan3D: توپولوژی هوشمند",
+    "inputs": {
+      "control_after_generate": {
+        "name": "کنترل پس از تولید"
+      },
+      "face_level": {
+        "name": "سطح وجه",
+        "tooltip": "سطح کاهش چندضلعی."
+      },
+      "model_3d": {
+        "name": "مدل سه‌بعدی",
+        "tooltip": "مدل سه‌بعدی ورودی (GLB یا OBJ)"
+      },
+      "polygon_type": {
+        "name": "نوع چندضلعی",
+        "tooltip": "نوع ترکیب سطح."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "seed تعیین می‌کند که node باید دوباره اجرا شود یا خیر؛ نتایج صرف‌نظر از seed غیرقطعی هستند."
+      }
+    },
+    "outputs": {
+      "0": {
         "name": "OBJ",
         "tooltip": null
       }
@@ -14418,12 +15686,20 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
       "1": {
         "name": "GLB",
         "tooltip": null
       },
       "2": {
         "name": "OBJ",
+        "tooltip": null
+      },
+      "3": {
+        "name": "تصویر بافت",
         "tooltip": null
       }
     }
@@ -14612,6 +15888,108 @@
     },
     "outputs": {
       "0": {
+        "tooltip": null
+      }
+    }
+  },
+  "TextGenerate": {
+    "display_name": "تولید متن",
+    "inputs": {
+      "clip": {
+        "name": "clip"
+      },
+      "image": {
+        "name": "تصویر"
+      },
+      "max_length": {
+        "name": "حداکثر طول"
+      },
+      "prompt": {
+        "name": "پرامپت"
+      },
+      "sampling_mode": {
+        "name": "حالت نمونه‌گیری"
+      },
+      "sampling_mode_min_p": {
+        "name": "حداقل p"
+      },
+      "sampling_mode_presence_penalty": {
+        "name": "presence_penalty"
+      },
+      "sampling_mode_repetition_penalty": {
+        "name": "جریمه تکرار"
+      },
+      "sampling_mode_seed": {
+        "name": "بذر"
+      },
+      "sampling_mode_temperature": {
+        "name": "دمای نمونه‌گیری"
+      },
+      "sampling_mode_top_k": {
+        "name": "top_k"
+      },
+      "sampling_mode_top_p": {
+        "name": "top_p"
+      },
+      "thinking": {
+        "name": "تفکر",
+        "tooltip": "در حالت تفکر عمل کنید اگر مدل از آن پشتیبانی می‌کند."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "متن تولید شده",
+        "tooltip": null
+      }
+    }
+  },
+  "TextGenerateLTX2Prompt": {
+    "display_name": "تولید متن LTX2Prompt",
+    "inputs": {
+      "clip": {
+        "name": "clip"
+      },
+      "image": {
+        "name": "تصویر"
+      },
+      "max_length": {
+        "name": "حداکثر طول"
+      },
+      "prompt": {
+        "name": "پرامپت"
+      },
+      "sampling_mode": {
+        "name": "حالت نمونه‌گیری"
+      },
+      "sampling_mode_min_p": {
+        "name": "حداقل p"
+      },
+      "sampling_mode_presence_penalty": {
+        "name": "presence_penalty"
+      },
+      "sampling_mode_repetition_penalty": {
+        "name": "جریمه تکرار"
+      },
+      "sampling_mode_seed": {
+        "name": "بذر"
+      },
+      "sampling_mode_temperature": {
+        "name": "دمای نمونه‌گیری"
+      },
+      "sampling_mode_top_k": {
+        "name": "top_k"
+      },
+      "sampling_mode_top_p": {
+        "name": "top_p"
+      },
+      "thinking": {
+        "name": "تفکر",
+        "tooltip": "در حالت تفکر عمل کنید اگر مدل از آن پشتیبانی می‌کند."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "متن تولید شده",
         "tooltip": null
       }
     }
@@ -14876,6 +16254,10 @@
         "name": "شرط مثبت",
         "tooltip": "شرط مثبت مورد استفاده برای آموزش."
       },
+      "quantized_backward": {
+        "name": "quantized_backward",
+        "tooltip": "زمانی که training_dtype روی 'none' تنظیم شده و آموزش روی مدل quantized انجام می‌شود، در صورت فعال بودن، عملیات backward با quantized matmul انجام می‌شود."
+      },
       "rank": {
         "name": "رتبه",
         "tooltip": "رتبه لایه‌های LoRA."
@@ -15073,6 +16455,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
+      "1": {
+        "name": "شناسه وظیفه مدل",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -15130,6 +16520,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
+      "1": {
+        "name": "شناسه وظیفه مدل",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -15146,6 +16544,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
+      "1": {
+        "name": "شناسه وظیفه مدل",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -15163,6 +16569,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
+      "1": {
+        "name": "شناسه وظیفه ری‌تارگت",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -15177,6 +16591,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
+      "1": {
+        "name": "شناسه وظیفه ریگ",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -15227,6 +16649,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
+      "1": {
+        "name": "شناسه وظیفه مدل",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -15256,6 +16686,14 @@
       }
     },
     "outputs": {
+      "0": {
+        "name": "فایل مدل",
+        "tooltip": null
+      },
+      "1": {
+        "name": "شناسه وظیفه مدل",
+        "tooltip": null
+      },
       "2": {
         "name": "GLB",
         "tooltip": null
@@ -17293,6 +18731,68 @@
     "outputs": {
       "0": {
         "tooltip": null
+      }
+    }
+  },
+  "WanSCAILToVideo": {
+    "display_name": "WanSCAILToVideo",
+    "inputs": {
+      "batch_size": {
+        "name": "اندازه دسته"
+      },
+      "clip_vision_output": {
+        "name": "خروجی clip vision"
+      },
+      "height": {
+        "name": "ارتفاع"
+      },
+      "length": {
+        "name": "طول"
+      },
+      "negative": {
+        "name": "منفی"
+      },
+      "pose_end": {
+        "name": "پایان pose",
+        "tooltip": "گام پایان برای استفاده از pose conditioning."
+      },
+      "pose_start": {
+        "name": "شروع pose",
+        "tooltip": "گام شروع برای استفاده از pose conditioning."
+      },
+      "pose_strength": {
+        "name": "قدرت pose",
+        "tooltip": "قدرت pose در latent."
+      },
+      "pose_video": {
+        "name": "ویدئوی pose",
+        "tooltip": "ویدئو برای pose conditioning استفاده می‌شود. به نصف وضوح ویدئوی اصلی کاهش داده می‌شود."
+      },
+      "positive": {
+        "name": "مثبت"
+      },
+      "reference_image": {
+        "name": "تصویر مرجع"
+      },
+      "vae": {
+        "name": "vae"
+      },
+      "width": {
+        "name": "عرض"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "مثبت",
+        "tooltip": null
+      },
+      "1": {
+        "name": "منفی",
+        "tooltip": null
+      },
+      "2": {
+        "name": "latent",
+        "tooltip": "latent خالی با اندازه تولید."
       }
     }
   },

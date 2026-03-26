@@ -2,6 +2,8 @@ import { toString } from 'es-toolkit/compat'
 import { toValue } from 'vue'
 
 import { PREFIX, SEPARATOR } from '@/constants/groupNodeConstants'
+import { MovingInputLink } from '@/lib/litegraph/src/canvas/MovingInputLink'
+import { AutoPanController } from '@/renderer/core/canvas/useAutoPan'
 import { LitegraphLinkAdapter } from '@/renderer/core/canvas/litegraph/litegraphLinkAdapter'
 import type { LinkRenderContext } from '@/renderer/core/canvas/litegraph/litegraphLinkAdapter'
 import { getSlotPosition } from '@/renderer/core/canvas/litegraph/slotCalculations'
@@ -11,6 +13,7 @@ import { forEachNode } from '@/utils/graphTraversalUtil'
 
 import { CanvasPointer } from './CanvasPointer'
 import type { ContextMenu } from './ContextMenu'
+import { createCursorCache } from './cursorCache'
 import { DragAndScale } from './DragAndScale'
 import type { AnimationOptions } from './DragAndScale'
 import type { LGraph } from './LGraph'
@@ -24,6 +27,10 @@ import type { RerouteId } from './Reroute'
 import { LinkConnector } from './canvas/LinkConnector'
 import { isOverNodeInput, isOverNodeOutput } from './canvas/measureSlots'
 import { strokeShape } from './draw'
+import {
+  cachedMeasureText,
+  clearTextMeasureCache
+} from './utils/textMeasureCache'
 import type {
   CustomEventDispatcher,
   ICustomEventTarget
@@ -180,6 +187,14 @@ interface IDialogOptions {
   checkForInput?: boolean
   closeOnLeave?: boolean
   onclose?(): void
+}
+
+export interface PromptOptions {
+  multiline?: boolean
+  inputType?: 'text' | 'number'
+  min?: number
+  max?: number
+  step?: number
 }
 
 /** @inheritdoc {@link LGraphCanvas.state} */
@@ -363,6 +378,8 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     this.canvas.dispatchEvent(new CustomEvent(type, { detail }))
   }
 
+  private _setCursor!: ReturnType<typeof createCursorCache>
+
   private _updateCursorStyle() {
     if (!this.state.shouldSetCursor) return
 
@@ -385,7 +402,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
       cursor = 'grab'
     }
 
-    this.canvas.style.cursor = cursor
+    this._setCursor(cursor)
   }
 
   // Whether the canvas was previously being dragged prior to pressing space key.
@@ -524,6 +541,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
   readonly pointer: CanvasPointer
   zoom_modify_alpha: boolean
   zoom_speed: number
+  auto_pan_speed: number
   node_title_color: string
   default_link_color: string
   default_connection_color: {
@@ -555,10 +573,13 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
   clear_background_color: string
   render_only_selected: boolean
   show_info: boolean
+  /** Additional text appended to the canvas info overlay (rendered by {@link renderInfo}). */
+  info_text: string | undefined
   allow_dragcanvas: boolean
   allow_dragnodes: boolean
   allow_interaction: boolean
   multi_select: boolean
+  groupSelectChildren: boolean
   allow_searchbox: boolean
   allow_reconnect_links: boolean
   align_to_grid: boolean
@@ -668,6 +689,8 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
   highlighted_links: Dictionary<boolean> = {}
 
   private _visibleReroutes: Set<Reroute> = new Set()
+  private _autoPan: AutoPanController | null = null
+  private _ghostPointerHandler: ((e: PointerEvent) => void) | null = null
 
   dirty_canvas: boolean = true
   dirty_bgcanvas: boolean = true
@@ -823,6 +846,11 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
 
     // @deprecated Workaround: Keep until connecting_links is removed.
     this.linkConnector.events.addEventListener('reset', () => {
+      // Only stop link-drag autoPan; ghost placement manages its own.
+      if (this.state.ghostNodeId == null) {
+        this._autoPan?.stop()
+        this._autoPan = null
+      }
       this.connecting_links = null
       this.dirty_bgcanvas = true
     })
@@ -863,7 +891,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
           if ('shiftKey' in e && e.shiftKey) {
             if (this.allow_searchbox) {
               this.showSearchBox(
-                e as unknown as MouseEvent,
+                e as MouseEvent,
                 linkReleaseContext as IShowSearchOptions
               )
             }
@@ -890,6 +918,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     this.zoom_modify_alpha = true
     // in range (1.01, 2.5). Less than 1 will invert the zoom direction
     this.zoom_speed = 1.1
+    this.auto_pan_speed = 15
 
     this.node_title_color = LiteGraph.NODE_TITLE_COLOR
     this.default_link_color = LiteGraph.LINK_COLOR
@@ -927,6 +956,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     this.allow_interaction = true
     // allow selecting multi nodes without pressing extra keys
     this.multi_select = false
+    this.groupSelectChildren = false
     this.allow_searchbox = true
     // allows to change a connection with having to redo it again
     this.allow_reconnect_links = true
@@ -1910,6 +1940,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     this.pointer.element = element
 
     if (!element) return
+    this._setCursor = createCursorCache(element)
 
     // TODO: classList.add
     element.className += ' lgraphcanvas'
@@ -1942,6 +1973,11 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     // console.log("pointerevents: _doNothing "+e.type);
     e.preventDefault()
     return false
+  }
+
+  /** Prevents default for middle-click auxclick only. */
+  _preventMiddleAuxClick(e: MouseEvent): void {
+    if (e.button === 1) e.preventDefault()
   }
 
   /** Captures an event and prevents default - returns true. */
@@ -1979,6 +2015,8 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     canvas.addEventListener('pointercancel', this._mousecancel_callback, true)
 
     canvas.addEventListener('contextmenu', this._doNothing)
+    // Prevent middle-click paste (PRIMARY clipboard on Linux) - fixes #4464
+    canvas.addEventListener('auxclick', this._preventMiddleAuxClick)
 
     // Keyboard
     this._key_callback = this.processKey.bind(this)
@@ -2017,6 +2055,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     canvas.removeEventListener('keydown', this._key_callback!)
     document.removeEventListener('keyup', this._key_callback!)
     canvas.removeEventListener('contextmenu', this._doNothing)
+    canvas.removeEventListener('auxclick', this._preventMiddleAuxClick)
     canvas.removeEventListener('dragenter', this._doReturnTrue)
 
     this._mousedown_callback = undefined
@@ -2049,7 +2088,28 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     if (!graph) throw new NullGraphError()
 
     pointer.onDragEnd = (upEvent) => linkConnector.dropLinks(graph, upEvent)
-    pointer.finally = () => this.linkConnector.reset(true)
+    pointer.finally = () => {
+      this._autoPan?.stop()
+      this._autoPan = null
+      this.linkConnector.reset(true)
+    }
+
+    this._autoPan = new AutoPanController({
+      canvas: this.canvas,
+      ds: this.ds,
+      maxPanSpeed: this.auto_pan_speed,
+      onPan: () => {
+        const rect = this.canvas.getBoundingClientRect()
+        const { scale } = this.ds
+        this.graph_mouse[0] =
+          (this.mouse[0] - rect.left) / scale - this.ds.offset[0]
+        this.graph_mouse[1] =
+          (this.mouse[1] - rect.top) / scale - this.ds.offset[1]
+        this._dirty()
+      }
+    })
+    this._autoPan.updatePointer(this.mouse[0], this.mouse[1])
+    this._autoPan.start()
   }
 
   /**
@@ -2564,8 +2624,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
           }
           pointer.finally = () => (this.resizingGroup = null)
         } else {
-          const f = group.font_size || LiteGraph.DEFAULT_GROUP_FONT_SIZE
-          const headerHeight = f * 1.4
+          const headerHeight = LiteGraph.NODE_TITLE_HEIGHT
           if (
             isInRectangle(
               x,
@@ -2938,6 +2997,11 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
 
             // Enforce minimum size
             const min = node.computeSize()
+            if (this._snapToGrid) {
+              // Previously newBounds.size is snapped with 'round'
+              // Now the minimum size is snapped with 'ceil' to avoid clipping
+              snapPoint(min, this._snapToGrid, 'ceil')
+            }
             if (newBounds.width < min[0]) {
               // If resizing from left, adjust position to maintain right edge
               if (resizeDirection.includes('W')) {
@@ -2969,7 +3033,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
           }
 
           // Set appropriate cursor for resize direction
-          this.canvas.style.cursor = cursors[resizeDirection]
+          this._setCursor(cursors[resizeDirection])
           return
         }
       }
@@ -3256,7 +3320,10 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
       (this.allow_interaction || node?.flags.allow_interaction) &&
       !this.read_only
     ) {
-      if (linkConnector.isConnecting) this.dirty_canvas = true
+      if (linkConnector.isConnecting) {
+        this._autoPan?.updatePointer(e.clientX, e.clientY)
+        this.dirty_canvas = true
+      }
 
       // remove mouseover flag
       this.updateMouseOverNodes(node, e)
@@ -3462,6 +3529,8 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
 
       // Items being dragged
       if (this.isDragging) {
+        this._autoPan?.updatePointer(e.clientX, e.clientY)
+
         const selected = this.selectedItems
         const allItems = e.ctrlKey ? selected : getAllNestedItems(selected)
 
@@ -3540,12 +3609,40 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     // Ensure that dragging is properly cleaned up, on success or failure.
     pointer.finally = () => {
       this.isDragging = false
+      this._autoPan?.stop()
+      this._autoPan = null
       this.graph?.afterChange()
       this.emitAfterChange()
     }
 
     this.processSelect(item, pointer.eDown, sticky)
     this.isDragging = true
+
+    this._startNodeAutoPan()
+  }
+
+  private _startNodeAutoPan(): void {
+    this._autoPan = new AutoPanController({
+      canvas: this.canvas,
+      ds: this.ds,
+      maxPanSpeed: this.auto_pan_speed,
+      onPan: (panX, panY) => {
+        const selected = this.selectedItems
+        const allItems = getAllNestedItems(selected)
+
+        if (LiteGraph.vueNodesMode) {
+          this.moveChildNodesInGroupVueMode(allItems, panX, panY)
+        } else {
+          for (const item of allItems) {
+            item.move(panX, panY, true)
+          }
+        }
+
+        this._dirty()
+      }
+    })
+    this._autoPan.updatePointer(this.mouse[0], this.mouse[1])
+    this._autoPan.start()
   }
 
   /**
@@ -3593,6 +3690,20 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     this.deselectAll()
     this.select(node)
     this.isDragging = true
+
+    this._startNodeAutoPan()
+
+    // Listen on document so autopan works when the pointer is over DOM elements.
+    this._ghostPointerHandler = (e: PointerEvent) => {
+      // Trigger mouse move so the ghost node follows the cursor the same as when dragging a node.
+      this.processMouseMove(e)
+    }
+    document.addEventListener('pointermove', this._ghostPointerHandler)
+    // When the pointer leaves the viewport quickly, ensure we still trigger auto-pan.
+    document.documentElement.addEventListener(
+      'pointerleave',
+      this._ghostPointerHandler
+    )
   }
 
   /**
@@ -3605,6 +3716,17 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
 
     this.state.ghostNodeId = null
     this.isDragging = false
+    this._autoPan?.stop()
+    this._autoPan = null
+
+    if (this._ghostPointerHandler) {
+      document.removeEventListener('pointermove', this._ghostPointerHandler)
+      document.documentElement.removeEventListener(
+        'pointerleave',
+        this._ghostPointerHandler
+      )
+      this._ghostPointerHandler = null
+    }
 
     const node = this.graph?.getNodeById(nodeId)
     if (!node) return
@@ -3786,13 +3908,6 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     return
   }
 
-  private _noItemsSelected(): void {
-    const event = new CustomEvent('litegraph:no-items-selected', {
-      bubbles: true
-    })
-    this.canvas.dispatchEvent(event)
-  }
-
   /**
    * process a key event
    */
@@ -3837,31 +3952,6 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
         this.node_panel?.close()
         this.options_panel?.close()
         if (this.node_panel || this.options_panel) block_default = true
-      } else if (e.keyCode === 65 && e.ctrlKey) {
-        // select all Control A
-        this.selectItems()
-        block_default = true
-      } else if (e.keyCode === 67 && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
-        // copy
-        if (this.selected_nodes) {
-          this.copyToClipboard()
-          block_default = true
-        }
-      } else if (e.keyCode === 86 && (e.metaKey || e.ctrlKey)) {
-        // paste
-        this.pasteFromClipboard({ connectInputs: e.shiftKey })
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        // delete or backspace
-        // @ts-expect-error EventTarget.localName is not in standard types
-        if (e.target.localName != 'input' && e.target.localName != 'textarea') {
-          if (this.selectedItems.size === 0) {
-            this._noItemsSelected()
-            return
-          }
-
-          this.deleteSelected()
-          block_default = true
-        }
       }
 
       // TODO
@@ -4064,6 +4154,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     for (const nodeInfo of allNodeInfo)
       if (nodeInfo.type in subgraphIdMap)
         nodeInfo.type = subgraphIdMap[nodeInfo.type]
+    remapClipboardSubgraphNodeIds(parsed, graph.rootGraph)
 
     // Subgraphs
     for (const info of parsed.subgraphs) {
@@ -4094,8 +4185,8 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
       nodes.set(info.id, node)
       info.id = -1
 
-      node.configure(info)
       graph.add(node)
+      node.configure(info)
 
       created.push(node)
     }
@@ -4165,6 +4256,8 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
         item.setPos(item.pos[0] + dx, item.pos[1] + dy)
       } else if (item instanceof Reroute) {
         item.move(dx, dy)
+      } else if (item instanceof LGraphGroup) {
+        item.move(dx, dy, true)
       }
     }
 
@@ -4387,7 +4480,17 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
       if (!modifySelection) this.deselectAll(item)
       this.select(item)
     } else if (modifySelection && !sticky) {
-      this.deselect(item)
+      // Modifier-click toggles only the clicked item, not its children.
+      // Cascade on select is a convenience; cascade on deselect would
+      // remove the user's ability to keep children selected (e.g. for
+      // deletion) after toggling the group off.
+      if (item instanceof LGraphGroup && this.groupSelectChildren) {
+        item.selected = false
+        this.selectedItems.delete(item)
+        this.state.selectionChanged = true
+      } else {
+        this.deselect(item)
+      }
     } else if (!sticky) {
       this.deselectAll(item)
     } else {
@@ -4412,6 +4515,19 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
 
     if (item instanceof LGraphGroup) {
       item.recomputeInsideNodes()
+      if (this.groupSelectChildren) {
+        this.#traverseGroupChildren(
+          item,
+          (child) => {
+            if (!child.selected || !this.selectedItems.has(child)) {
+              child.selected = true
+              this.selectedItems.add(child)
+              this.state.selectionChanged = true
+            }
+          },
+          (child) => this.select(child)
+        )
+      }
       return
     }
 
@@ -4450,6 +4566,22 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     item.selected = false
     this.selectedItems.delete(item)
     this.state.selectionChanged = true
+
+    if (item instanceof LGraphGroup && this.groupSelectChildren) {
+      this.#traverseGroupChildren(
+        item,
+        (child) => {
+          if (child.selected || this.selectedItems.has(child)) {
+            child.selected = false
+            this.selectedItems.delete(child)
+            this.state.selectionChanged = true
+          }
+        },
+        (child) => this.deselect(child)
+      )
+      return
+    }
+
     if (!(item instanceof LGraphNode)) return
 
     // Node-specific handling
@@ -4481,6 +4613,29 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
         if (node && this.selectedItems.has(node)) continue
 
         delete this.highlighted_links[id]
+      }
+    }
+  }
+
+  /**
+   * Iterative traversal of a group's descendants.
+   * Calls {@link groupAction} on nested groups and {@link leafAction} on
+   * non-group children.  Always recurses into nested groups regardless of
+   * their current selection state.
+   */
+  #traverseGroupChildren(
+    group: LGraphGroup,
+    groupAction: (child: LGraphGroup) => void,
+    leafAction: (child: Positionable) => void
+  ): void {
+    const stack: Positionable[] = [...group._children]
+    while (stack.length > 0) {
+      const child = stack.pop()!
+      if (child instanceof LGraphGroup) {
+        groupAction(child)
+        for (const nested of child._children) stack.push(nested)
+      } else {
+        leafAction(child)
       }
     }
   }
@@ -4617,7 +4772,9 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     this.emitBeforeChange()
     graph.beforeChange()
 
-    for (const item of this.selectedItems) {
+    // Snapshot to prevent mutation during iteration (e.g. group deselect cascade)
+    const toDelete = [...this.selectedItems]
+    for (const item of toDelete) {
       if (item instanceof LGraphNode) {
         const node = item
         if (node.block_delete) continue
@@ -4843,6 +5000,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
    * draws the front canvas (the one containing all the nodes)
    */
   drawFrontCanvas(): void {
+    clearTextMeasureCache()
     this.dirty_canvas = false
 
     const { ctx, canvas, graph } = this
@@ -5014,6 +5172,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
           }
         )
       }
+      if (renderLink instanceof MovingInputLink) this.setDirty(false, true)
 
       ctx.fillStyle = colour
       ctx.beginPath()
@@ -5205,8 +5364,15 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
    * draws some useful stats in the corner of the canvas
    */
   renderInfo(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const lineHeight = 13
+    const lineCount = (this.graph ? 5 : 1) + (this.info_text ? 1 : 0)
     x = x || 10
-    y = y || this.canvas.offsetHeight - 80
+    y =
+      y ||
+      this.canvas.height /
+        ((this.canvas.ownerDocument.defaultView ?? window).devicePixelRatio ||
+          1) -
+        (lineCount + 1) * lineHeight
 
     ctx.save()
     ctx.translate(x, y)
@@ -5214,18 +5380,26 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     ctx.font = `10px ${LiteGraph.DEFAULT_FONT}`
     ctx.fillStyle = '#888'
     ctx.textAlign = 'left'
+    let line = 1
     if (this.graph) {
-      ctx.fillText(`T: ${this.graph.globaltime.toFixed(2)}s`, 5, 13 * 1)
-      ctx.fillText(`I: ${this.graph.iteration}`, 5, 13 * 2)
+      ctx.fillText(
+        `T: ${this.graph.globaltime.toFixed(2)}s`,
+        5,
+        lineHeight * line++
+      )
+      ctx.fillText(`I: ${this.graph.iteration}`, 5, lineHeight * line++)
       ctx.fillText(
         `N: ${this.graph._nodes.length} [${this.visible_nodes.length}]`,
         5,
-        13 * 3
+        lineHeight * line++
       )
-      ctx.fillText(`V: ${this.graph._version}`, 5, 13 * 4)
-      ctx.fillText(`FPS:${this.fps.toFixed(2)}`, 5, 13 * 5)
+      ctx.fillText(`V: ${this.graph._version}`, 5, lineHeight * line++)
+      ctx.fillText(`FPS:${this.fps.toFixed(2)}`, 5, lineHeight * line++)
     } else {
-      ctx.fillText('No graph selected', 5, 13 * 1)
+      ctx.fillText('No graph selected', 5, lineHeight * line++)
+    }
+    if (this.info_text) {
+      ctx.fillText(this.info_text, 5, lineHeight * line++)
     }
     ctx.restore()
   }
@@ -5561,8 +5735,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     text = text.substring(0, 30)
 
     ctx.font = '14px Courier New'
-    const info = ctx.measureText(text)
-    const w = info.width + 20
+    const w = cachedMeasureText(ctx, text) + 20
     const h = 24
     ctx.shadowColor = 'black'
     ctx.shadowOffsetX = 2
@@ -5716,7 +5889,8 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
   drawSnapGuide(
     ctx: CanvasRenderingContext2D,
     item: Positionable,
-    shape = RenderShape.ROUND
+    shape = RenderShape.ROUND,
+    { offsetToSlot }: { offsetToSlot?: boolean } = {}
   ) {
     const snapGuide = temp
     snapGuide.set(item.boundingRect)
@@ -5724,7 +5898,10 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     // Not all items have pos equal to top-left of bounds
     const { pos } = item
     const offsetX = pos[0] - snapGuide[0]
-    const offsetY = pos[1] - snapGuide[1]
+    const offsetY =
+      pos[1] -
+      snapGuide[1] -
+      (offsetToSlot ? LiteGraph.NODE_SLOT_HEIGHT * 0.7 : 0)
 
     // Normalise boundingRect to pos to snap
     snapGuide[0] += offsetX
@@ -5784,6 +5961,19 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     ctx.globalAlpha = this.editor_alpha
     // for every node
     const nodes = graph._nodes
+
+    // Ensure widget-input slot positions are computed before rendering links.
+    // arrange() sets input.pos for widget-backed slots, but is normally called
+    // in drawNode (foreground canvas). drawConnections runs on the background
+    // canvas, which may render before drawNode has executed for this frame.
+    // The dirty flag avoids a per-frame O(N) scan of all inputs.
+    for (const node of nodes) {
+      if (node.flags.collapsed || !node._widgetSlotsDirty) continue
+
+      node._setConcreteSlots()
+      node.arrange()
+    }
+
     for (const node of nodes) {
       // for every input (we render just inputs because it is easier as every slot can only have one input)
       const { inputs } = node
@@ -5901,13 +6091,21 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
         this.isDragging &&
         this.selectedItems.has(reroute)
       ) {
-        this.drawSnapGuide(ctx, reroute, RenderShape.CIRCLE)
+        this.drawSnapGuide(ctx, reroute, RenderShape.CIRCLE, {
+          offsetToSlot: true
+        })
       }
       reroute.draw(ctx, this._pattern)
 
       // Never draw slots when the pointer is down
       if (!this.pointer.isDown) reroute.drawSlots(ctx)
     }
+
+    const highlightPos = this._getHighlightPosition()
+    this.linkConnector.renderLinks
+      .filter((rl) => rl instanceof MovingInputLink)
+      .forEach((rl) => rl.drawConnectionCircle(ctx, highlightPos))
+
     ctx.globalAlpha = 1
   }
 
@@ -6564,7 +6762,7 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
         const ySizeFix = opts.posSizeFix[1] * LiteGraph.NODE_SLOT_HEIGHT
         const nodeX = opts.position[0] + opts.posAdd[0] + xSizeFix
         const nodeY = opts.position[1] + opts.posAdd[1] + ySizeFix
-        const pos = [nodeX, nodeY]
+        const pos: [number, number] = [nodeX, nodeY]
         const newNode = LiteGraph.createNode(nodeTypeStr, nodeNewOpts?.title, {
           pos
         })
@@ -6858,17 +7056,23 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     value: string | number,
     callback: (value: string) => void,
     event: CanvasPointerEvent,
-    multiline?: boolean
+    multilineOrOptions?: boolean | PromptOptions
   ): HTMLDivElement {
     const that = this
     title = title || ''
 
+    const options: PromptOptions =
+      typeof multilineOrOptions === 'boolean'
+        ? { multiline: multilineOrOptions }
+        : (multilineOrOptions ?? {})
+
+    const inputType = options.inputType === 'number' ? 'number' : 'text'
     const customProperties = {
       is_modified: false,
       className: 'graphdialog rounded',
-      innerHTML: multiline
+      innerHTML: options.multiline
         ? "<span class='name'></span> <textarea autofocus class='value'></textarea><button class='rounded'>OK</button>"
-        : "<span class='name'></span> <input autofocus type='text' class='value'/><button class='rounded'>OK</button>",
+        : `<span class='name'></span> <input autofocus type='${inputType}' class='value'/><button class='rounded'>OK</button>`,
       close() {
         that.prompt_box = null
         if (dialog.parentNode) {
@@ -6934,6 +7138,14 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
     if (!value_element) throw new TypeError('value_element was null')
 
     value_element.value = String(value)
+    if (options.inputType === 'number') {
+      if (options.min != null)
+        value_element.setAttribute('min', String(options.min))
+      if (options.max != null)
+        value_element.setAttribute('max', String(options.max))
+      if (options.step != null)
+        value_element.setAttribute('step', String(options.step))
+    }
     value_element.select()
 
     const input = value_element
@@ -6942,6 +7154,12 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
       if (e.key == 'Escape') {
         // ESC
         dialog.close()
+      } else if (e.key === '/' && this.type === 'number') {
+        // Switch to text mode for expression editing
+        this.type = 'text'
+        this.removeAttribute('min')
+        this.removeAttribute('max')
+        this.removeAttribute('step')
       } else if (
         e.key == 'Enter' &&
         (e.target as Element).localName != 'textarea'
@@ -8480,6 +8698,26 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
       } else {
         // on node
         menu_info = this.getNodeMenuOptions(node)
+
+        const widget = node.getWidgetOnPos(event.canvasX, event.canvasY)
+        if (
+          widget &&
+          'getContextMenuOptions' in widget &&
+          typeof widget.getContextMenuOptions === 'function'
+        ) {
+          const widgetMenuItems = (
+            widget as {
+              getContextMenuOptions: (opts: {
+                e: CanvasPointerEvent
+                node: LGraphNode
+                canvas: LGraphCanvas
+              }) => IContextMenuValue[]
+            }
+          ).getContextMenuOptions({ e: event, node, canvas: this })
+          if (widgetMenuItems.length) {
+            menu_info.unshift(...widgetMenuItems, null)
+          }
+        }
       }
     } else {
       menu_info = this.getCanvasMenuOptions()
@@ -8787,5 +9025,117 @@ export class LGraphCanvas implements CustomEventDispatcher<LGraphCanvasEventMap>
         offset: [...this.ds.offset] as [number, number]
       }
     }
+  }
+}
+
+function patchLinkNodeIds(
+  links: { origin_id: NodeId; target_id: NodeId }[] | undefined,
+  remappedIds: Map<NodeId, NodeId>
+) {
+  if (!links?.length) return
+
+  for (const link of links) {
+    const newOriginId = remappedIds.get(link.origin_id)
+    if (newOriginId !== undefined) link.origin_id = newOriginId
+
+    const newTargetId = remappedIds.get(link.target_id)
+    if (newTargetId !== undefined) link.target_id = newTargetId
+  }
+}
+
+function remapNodeId(
+  nodeId: string,
+  remappedIds: Map<NodeId, NodeId>
+): NodeId | undefined {
+  const directMatch = remappedIds.get(nodeId)
+  if (directMatch !== undefined) return directMatch
+  if (!/^-?\d+$/.test(nodeId)) return undefined
+
+  const numericId = Number(nodeId)
+  if (!Number.isSafeInteger(numericId)) return undefined
+
+  return remappedIds.get(numericId)
+}
+
+function remapProxyWidgets(
+  info: ISerialisedNode,
+  remappedIds: Map<NodeId, NodeId> | undefined
+) {
+  if (!remappedIds || remappedIds.size === 0) return
+
+  const proxyWidgets = info.properties?.proxyWidgets
+  if (!Array.isArray(proxyWidgets)) return
+
+  for (const entry of proxyWidgets) {
+    if (!Array.isArray(entry)) continue
+
+    const [nodeId] = entry
+    if (typeof nodeId !== 'string' || nodeId === '-1') continue
+
+    const remappedNodeId = remapNodeId(nodeId, remappedIds)
+    if (remappedNodeId !== undefined) entry[0] = String(remappedNodeId)
+  }
+}
+
+/**
+ * Remaps pasted subgraph interior node IDs that would collide with existing
+ * node IDs in the root graph. Also patches subgraph link node IDs and
+ * SubgraphNode `properties.proxyWidgets` references so promoted widget
+ * associations stay aligned with remapped interior IDs.
+ */
+export function remapClipboardSubgraphNodeIds(
+  parsed: ClipboardItems,
+  rootGraph: LGraph
+): void {
+  const usedNodeIds = new Set<number>()
+  forEachNode(rootGraph, (node) => {
+    if (typeof node.id !== 'number') return
+    usedNodeIds.add(node.id)
+    if (rootGraph.state.lastNodeId < node.id)
+      rootGraph.state.lastNodeId = node.id
+  })
+
+  function nextUniqueNodeId() {
+    while (usedNodeIds.has(++rootGraph.state.lastNodeId));
+    const nextId = rootGraph.state.lastNodeId
+    usedNodeIds.add(nextId)
+    return nextId
+  }
+
+  const subgraphNodeIdMap = new Map<UUID, Map<NodeId, NodeId>>()
+  for (const subgraphInfo of parsed.subgraphs ?? []) {
+    const remappedIds = new Map<NodeId, NodeId>()
+    const interiorNodes = subgraphInfo.nodes ?? []
+
+    for (const nodeInfo of interiorNodes) {
+      if (typeof nodeInfo.id !== 'number') continue
+
+      if (usedNodeIds.has(nodeInfo.id)) {
+        const oldId = nodeInfo.id
+        const newId = nextUniqueNodeId()
+        remappedIds.set(oldId, newId)
+        nodeInfo.id = newId
+        continue
+      }
+
+      usedNodeIds.add(nodeInfo.id)
+      if (rootGraph.state.lastNodeId < nodeInfo.id)
+        rootGraph.state.lastNodeId = nodeInfo.id
+    }
+
+    if (remappedIds.size > 0) {
+      patchLinkNodeIds(subgraphInfo.links, remappedIds)
+      subgraphNodeIdMap.set(subgraphInfo.id, remappedIds)
+    }
+  }
+
+  const allNodeInfo: ISerialisedNode[] = [
+    parsed.nodes ? [parsed.nodes] : [],
+    parsed.subgraphs ? parsed.subgraphs.map((s) => s.nodes ?? []) : []
+  ].flat(2)
+
+  for (const nodeInfo of allNodeInfo) {
+    if (typeof nodeInfo.type !== 'string') continue
+    remapProxyWidgets(nodeInfo, subgraphNodeIdMap.get(nodeInfo.type))
   }
 }

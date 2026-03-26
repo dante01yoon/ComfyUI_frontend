@@ -20,11 +20,27 @@ export async function extractFilesFromDragEvent(
   const uri = event.dataTransfer.getData(match)?.split('\n')?.[0]
   if (!uri) return []
 
-  const response = await fetch(uri)
-  const blob = await response.blob()
-  return [new File([blob], uri, { type: blob.type })]
+  try {
+    const response = await fetch(uri)
+    const blob = await response.blob()
+    return [new File([blob], uri, { type: blob.type })]
+  } catch {
+    return []
+  }
 }
 
 export function hasImageType({ type }: File): boolean {
   return type.startsWith('image')
+}
+
+export function hasAudioType({ type }: File): boolean {
+  return type.startsWith('audio')
+}
+
+export function hasVideoType({ type }: File): boolean {
+  return type.startsWith('video')
+}
+
+export function isMediaFile(file: File): boolean {
+  return hasImageType(file) || hasAudioType(file) || hasVideoType(file)
 }

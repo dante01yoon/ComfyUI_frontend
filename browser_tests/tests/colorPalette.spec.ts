@@ -38,16 +38,13 @@ const customColorPalettes = {
         CLEAR_BACKGROUND_COLOR: '#222222',
         NODE_TITLE_COLOR: 'rgba(255,255,255,.75)',
         NODE_SELECTED_TITLE_COLOR: '#FFF',
-        NODE_TEXT_SIZE: 14,
         NODE_TEXT_COLOR: '#b8b8b8',
-        NODE_SUBTEXT_SIZE: 12,
         NODE_DEFAULT_COLOR: 'rgba(0,0,0,.8)',
         NODE_DEFAULT_BGCOLOR: 'rgba(22,22,22,.8)',
         NODE_DEFAULT_BOXCOLOR: 'rgba(255,255,255,.75)',
         NODE_DEFAULT_SHAPE: 'box',
         NODE_BOX_OUTLINE_COLOR: '#236692',
         DEFAULT_SHADOW_COLOR: 'rgba(0,0,0,0)',
-        DEFAULT_GROUP_FONT: 24,
         WIDGET_BGCOLOR: '#242424',
         WIDGET_OUTLINE_COLOR: '#333',
         WIDGET_TEXT_COLOR: '#a3a3a8',
@@ -102,16 +99,13 @@ const customColorPalettes = {
         CLEAR_BACKGROUND_COLOR: '#000',
         NODE_TITLE_COLOR: 'rgba(255,255,255,.75)',
         NODE_SELECTED_TITLE_COLOR: '#FFF',
-        NODE_TEXT_SIZE: 14,
         NODE_TEXT_COLOR: '#b8b8b8',
-        NODE_SUBTEXT_SIZE: 12,
         NODE_DEFAULT_COLOR: 'rgba(0,0,0,.8)',
         NODE_DEFAULT_BGCOLOR: 'rgba(22,22,22,.8)',
         NODE_DEFAULT_BOXCOLOR: 'rgba(255,255,255,.75)',
         NODE_DEFAULT_SHAPE: 'box',
         NODE_BOX_OUTLINE_COLOR: '#236692',
         DEFAULT_SHADOW_COLOR: 'rgba(0,0,0,0)',
-        DEFAULT_GROUP_FONT: 24,
         WIDGET_BGCOLOR: '#242424',
         WIDGET_OUTLINE_COLOR: '#333',
         WIDGET_TEXT_COLOR: '#a3a3a8',
@@ -244,24 +238,19 @@ test.describe(
       await comfyPage.settings.setSetting('Comfy.Node.Opacity', 0.5)
       await comfyPage.settings.setSetting('Comfy.ColorPalette', 'light')
       await comfyPage.nextFrame()
-      const parsed = await (
-        await comfyPage.page.waitForFunction(
-          () => {
-            const workflow = localStorage.getItem('workflow')
-            if (!workflow) return null
-            try {
-              const data = JSON.parse(workflow)
-              return Array.isArray(data?.nodes) ? data : null
-            } catch {
-              return null
-            }
-          },
-          { timeout: 3000 }
-        )
-      ).jsonValue()
+      const parsed = await comfyPage.page.evaluate(() => {
+        const graph = window.app!.graph!
+        if (typeof graph.serialize !== 'function') {
+          throw new Error('app.graph.serialize is not available')
+        }
+        return graph.serialize() as {
+          nodes: Array<{ bgcolor?: string; color?: string }>
+        }
+      })
       expect(parsed.nodes).toBeDefined()
       expect(Array.isArray(parsed.nodes)).toBe(true)
-      for (const node of parsed.nodes) {
+      const nodes = parsed.nodes
+      for (const node of nodes) {
         if (node.bgcolor) expect(node.bgcolor).not.toMatch(/hsla/)
         if (node.color) expect(node.color).not.toMatch(/hsla/)
       }

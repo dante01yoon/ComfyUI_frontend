@@ -17,6 +17,7 @@ import type {
 } from '@/stores/dialogStore'
 
 import type { ComponentAttrs } from 'vue-component-type-helpers'
+import type { SubscriptionDialogReason } from '@/platform/cloud/subscription/composables/useSubscriptionDialog'
 
 // Lazy loaders for dialogs - components are loaded on first use
 const lazyApiNodesSignInContent = () =>
@@ -27,6 +28,8 @@ const lazyUpdatePasswordContent = () =>
   import('@/components/dialog/content/UpdatePasswordContent.vue')
 const lazyComfyOrgHeader = () =>
   import('@/components/dialog/header/ComfyOrgHeader.vue')
+const lazyCloudNotificationContent = () =>
+  import('@/platform/cloud/notification/components/CloudNotificationContent.vue')
 
 export type ConfirmationDialogType =
   | 'default'
@@ -274,8 +277,15 @@ export const useDialogService = () => {
   async function showTopUpCreditsDialog(options?: {
     isInsufficientCredits?: boolean
   }) {
-    const { isActiveSubscription, type } = useBillingContext()
-    if (!isActiveSubscription.value) return
+    const { isActiveSubscription, isFreeTier, type } = useBillingContext()
+    if (!isActiveSubscription.value || isFreeTier.value) {
+      await showSubscriptionRequiredDialog({
+        reason: options?.isInsufficientCredits
+          ? 'out_of_credits'
+          : 'top_up_blocked'
+      })
+      return
+    }
 
     const component =
       type.value === 'workspace'
@@ -392,7 +402,9 @@ export const useDialogService = () => {
     })
   }
 
-  async function showSubscriptionRequiredDialog() {
+  async function showSubscriptionRequiredDialog(options?: {
+    reason?: SubscriptionDialogReason
+  }) {
     if (!isCloud || !window.__CONFIG__?.subscription_required) {
       return
     }
@@ -400,7 +412,7 @@ export const useDialogService = () => {
     const { useSubscriptionDialog } =
       await import('@/platform/cloud/subscription/composables/useSubscriptionDialog')
     const { show } = useSubscriptionDialog()
-    show()
+    show(options)
   }
 
   // Workspace dialogs - dynamically imported to avoid bundling when feature flag is off
@@ -437,11 +449,26 @@ export const useDialogService = () => {
       component,
       props: { onConfirm },
       dialogComponentProps: {
-        ...workspaceDialogPt,
-        pt: {
-          ...workspaceDialogPt.pt,
-          root: { class: 'rounded-2xl max-w-[400px] w-full' }
-        }
+        ...workspaceDialogPt
+      }
+    })
+  }
+
+  /**
+   * Show the team workspaces dialog for creating or switching workspaces.
+   * Optionally calls `onConfirm` after a workspace is successfully created.
+   */
+  async function showTeamWorkspacesDialog(
+    onConfirm?: (name: string) => void | Promise<void>
+  ) {
+    const { default: component } =
+      await import('@/platform/workspace/components/dialogs/TeamWorkspacesDialogContent.vue')
+    return dialogStore.showDialog({
+      key: 'team-workspaces',
+      component,
+      props: { onConfirm },
+      dialogComponentProps: {
+        ...workspaceDialogPt
       }
     })
   }
@@ -463,11 +490,7 @@ export const useDialogService = () => {
       key: 'edit-workspace',
       component,
       dialogComponentProps: {
-        ...workspaceDialogPt,
-        pt: {
-          ...workspaceDialogPt.pt,
-          root: { class: 'rounded-2xl max-w-[400px] w-full' }
-        }
+        ...workspaceDialogPt
       }
     })
   }
@@ -490,11 +513,7 @@ export const useDialogService = () => {
       key: 'invite-member',
       component,
       dialogComponentProps: {
-        ...workspaceDialogPt,
-        pt: {
-          ...workspaceDialogPt.pt,
-          root: { class: 'rounded-2xl max-w-[512px] w-full' }
-        }
+        ...workspaceDialogPt
       }
     })
   }
@@ -506,11 +525,7 @@ export const useDialogService = () => {
       key: 'invite-member-upsell',
       component,
       dialogComponentProps: {
-        ...workspaceDialogPt,
-        pt: {
-          ...workspaceDialogPt.pt,
-          root: { class: 'rounded-2xl max-w-[512px] w-full' }
-        }
+        ...workspaceDialogPt
       }
     })
   }
@@ -552,12 +567,27 @@ export const useDialogService = () => {
       component,
       props: { cancelAt },
       dialogComponentProps: {
-        ...workspaceDialogPt,
-        pt: {
-          ...workspaceDialogPt.pt,
-          root: { class: 'rounded-2xl max-w-[400px] w-full' }
-        }
+        ...workspaceDialogPt
       }
+    })
+  }
+
+  /** Shows one-time cloud notification modal for macOS desktop users. */
+  async function showCloudNotification(): Promise<void> {
+    const { default: component } = await lazyCloudNotificationContent()
+    return new Promise<void>((resolve) => {
+      showLayoutDialog({
+        key: 'global-cloud-notification',
+        component,
+        props: {},
+        dialogComponentProps: {
+          closable: false,
+          pt: {
+            root: { class: 'w-170 max-h-[85vh]' }
+          },
+          onClose: () => resolve()
+        }
+      })
     })
   }
 
@@ -569,6 +599,7 @@ export const useDialogService = () => {
     showTopUpCreditsDialog,
     showUpdatePasswordDialog,
     showExtensionDialog,
+    showCloudNotification,
     prompt,
     showErrorDialog,
     confirm,
@@ -576,6 +607,7 @@ export const useDialogService = () => {
     showSmallLayoutDialog,
     showDeleteWorkspaceDialog,
     showCreateWorkspaceDialog,
+    showTeamWorkspacesDialog,
     showLeaveWorkspaceDialog,
     showEditWorkspaceDialog,
     showRemoveMemberDialog,

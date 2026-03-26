@@ -1,12 +1,11 @@
 <template>
-  <a
+  <div
     ref="wrapperRef"
     v-tooltip.bottom="{
       value: tooltipText,
       showDelay: 512
     }"
     draggable="false"
-    href="#"
     class="p-breadcrumb-item-link h-8 cursor-pointer px-2"
     :class="{
       'flex items-center gap-1': isActive,
@@ -23,7 +22,7 @@
     <span class="p-breadcrumb-item-label px-2">{{ item.label }}</span>
     <Tag v-if="item.isBlueprint" value="Blueprint" severity="primary" />
     <i v-if="isActive" class="pi pi-angle-down text-[10px]"></i>
-  </a>
+  </div>
   <Menu
     v-if="isActive || isRoot"
     ref="menu"
@@ -42,7 +41,7 @@
     v-if="isEditing"
     ref="itemInputRef"
     v-model="itemLabel"
-    class="fixed z-10000 px-2 py-2 text-[.8rem]"
+    class="fixed z-10000 p-2 text-[.8rem]"
     @blur="inputBlur(false)"
     @click.stop
     @keydown.enter="inputBlur(true)"
@@ -60,6 +59,7 @@ import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useWorkflowActionsMenu } from '@/composables/useWorkflowActionsMenu'
+import { ensureWorkflowSuffix, getWorkflowSuffix } from '@/utils/formatUtil'
 import { useWorkflowService } from '@/platform/workflow/core/services/workflowService'
 import {
   ComfyWorkflow,
@@ -70,7 +70,6 @@ import { useDialogService } from '@/services/dialogService'
 import { useCommandStore } from '@/stores/commandStore'
 import { useNodeDefStore } from '@/stores/nodeDefStore'
 import { useSubgraphNavigationStore } from '@/stores/subgraphNavigationStore'
-import { appendJsonExt } from '@/utils/formatUtil'
 import { graphHasMissingNodes } from '@/workbench/extensions/manager/utils/graphHasMissingNodes'
 
 interface Props {
@@ -78,9 +77,7 @@ interface Props {
   isActive?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  isActive: false
-})
+const { item, isActive } = defineProps<Props>()
 
 const nodeDefStore = useNodeDefStore()
 const hasMissingNodes = computed(() =>
@@ -103,15 +100,16 @@ const rename = async (
 ) => {
   if (newName && newName !== initialName) {
     // Synchronize the node titles with the new name
-    props.item.updateTitle?.(newName)
+    item.updateTitle?.(newName)
 
     if (workflowStore.activeSubgraph) {
       workflowStore.activeSubgraph.name = newName
     } else if (workflowStore.activeWorkflow) {
       try {
+        const suffix = getWorkflowSuffix(workflowStore.activeWorkflow.suffix)
         await workflowService.renameWorkflow(
           workflowStore.activeWorkflow,
-          ComfyWorkflow.basePath + appendJsonExt(newName)
+          ComfyWorkflow.basePath + ensureWorkflowSuffix(newName, suffix)
         )
       } catch (error) {
         console.error(error)
@@ -127,13 +125,13 @@ const rename = async (
   }
 }
 
-const isRoot = props.item.key === 'root'
+const isRoot = item.key === 'root'
 
 const tooltipText = computed(() => {
   if (hasMissingNodes.value && isRoot) {
     return t('breadcrumbsMenu.missingNodesWarning')
   }
-  return props.item.label
+  return item.label
 })
 
 const startRename = async () => {
@@ -145,7 +143,7 @@ const startRename = async () => {
   }
 
   isEditing.value = true
-  itemLabel.value = props.item.label as string
+  itemLabel.value = item.label as string
   void nextTick(() => {
     if (itemInputRef.value?.$el) {
       itemInputRef.value.$el.focus()
@@ -165,12 +163,12 @@ const handleClick = (event: MouseEvent) => {
   }
 
   if (event.detail === 1) {
-    if (props.isActive) {
+    if (isActive) {
       menu.value?.toggle(event)
     } else {
-      props.item.command?.({ item: props.item, originalEvent: event })
+      item.command?.({ item: item, originalEvent: event })
     }
-  } else if (props.isActive && event.detail === 2) {
+  } else if (isActive && event.detail === 2) {
     menu.value?.hide()
     event.stopPropagation()
     event.preventDefault()
@@ -180,35 +178,27 @@ const handleClick = (event: MouseEvent) => {
 
 const inputBlur = async (doRename: boolean) => {
   if (doRename) {
-    await rename(itemLabel.value, props.item.label as string)
+    await rename(itemLabel.value, item.label as string)
   }
 
   isEditing.value = false
 }
-
-const toggleMenu = (event: MouseEvent) => {
-  menu.value?.toggle(event)
-}
-
-defineExpose({
-  toggleMenu
-})
 </script>
 
 <style scoped>
-@reference '../../assets/css/style.css';
-
 .p-breadcrumb-item-link,
 .p-breadcrumb-item-icon {
-  @apply select-none;
+  user-select: none;
 }
 
 .p-breadcrumb-item-link {
-  @apply overflow-hidden;
+  overflow: hidden;
 }
 
 .p-breadcrumb-item-label {
-  @apply whitespace-nowrap text-ellipsis overflow-hidden;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .active-breadcrumb-item {

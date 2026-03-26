@@ -3,66 +3,60 @@ import { useToast } from 'primevue/usetoast'
 
 import { t } from '@/i18n'
 
+function legacyCopy(text: string): boolean {
+  const textarea = document.createElement('textarea')
+  textarea.setAttribute('readonly', '')
+  textarea.value = text
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '-9999px'
+  document.body.appendChild(textarea)
+  textarea.select()
+  try {
+    return document.execCommand('copy')
+  } finally {
+    textarea.remove()
+  }
+}
+
 export function useCopyToClipboard() {
-  const { copy, copied } = useClipboard()
+  const { copy, isSupported } = useClipboard()
   const toast = useToast()
-  const showSuccessToast = () => {
-    toast.add({
-      severity: 'success',
-      summary: t('g.success'),
-      detail: t('clipboard.successMessage'),
-      life: 3000
-    })
-  }
-  const showErrorToast = () => {
-    toast.add({
-      severity: 'error',
-      summary: t('g.error'),
-      detail: t('clipboard.errorMessage')
-    })
-  }
 
-  function fallbackCopy(text: string) {
-    const textarea = document.createElement('textarea')
-    textarea.setAttribute('readonly', '')
-    textarea.value = text
-    textarea.style.position = 'absolute'
-    textarea.style.left = '-9999px'
-    textarea.setAttribute('aria-hidden', 'true')
-    textarea.setAttribute('tabindex', '-1')
-    textarea.style.width = '1px'
-    textarea.style.height = '1px'
-    document.body.appendChild(textarea)
-    textarea.select()
+  async function copyToClipboard(text: string) {
+    let success = false
 
     try {
-      // using legacy document.execCommand for fallback for old and linux browsers
-      const successful = document.execCommand('copy')
-      if (successful) {
-        showSuccessToast()
-      } else {
-        showErrorToast()
+      if (isSupported.value) {
+        await copy(text)
+        success = true
       }
-    } catch (err) {
-      showErrorToast()
-    } finally {
-      textarea.remove()
+    } catch {
+      // Modern clipboard API failed, fall through to legacy
     }
-  }
 
-  const copyToClipboard = async (text: string) => {
-    try {
-      await copy(text)
-      if (copied.value) {
-        showSuccessToast()
-      } else {
-        // If VueUse copy failed, try fallback
-        fallbackCopy(text)
+    if (!success) {
+      try {
+        success = legacyCopy(text)
+      } catch {
+        // Legacy also failed
       }
-    } catch (err) {
-      // VueUse copy failed, try fallback
-      fallbackCopy(text)
     }
+
+    toast.add(
+      success
+        ? {
+            severity: 'success',
+            summary: t('g.success'),
+            detail: t('clipboard.successMessage'),
+            life: 3000
+          }
+        : {
+            severity: 'error',
+            summary: t('g.error'),
+            detail: t('clipboard.errorMessage')
+          }
+    )
   }
 
   return {

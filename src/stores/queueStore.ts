@@ -1,4 +1,3 @@
-import _ from 'es-toolkit/compat'
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef, toRaw, toValue } from 'vue'
 
@@ -14,11 +13,13 @@ import type {
   StatusWsMessageStatus,
   TaskOutput
 } from '@/schemas/apiSchema'
+import { appendCloudResParam } from '@/platform/distribution/cloudPreviewUtil'
 import { api } from '@/scripts/api'
+import { parseTaskOutput } from '@/stores/resultItemParsing'
 import type { ComfyApp } from '@/scripts/app'
 import { useExtensionService } from '@/services/extensionService'
 import { getJobDetail } from '@/services/jobOutputCache'
-import { useNodeOutputStore } from '@/stores/imagePreviewStore'
+import { useNodeOutputStore } from '@/stores/nodeOutputStore'
 import { useExecutionStore } from '@/stores/executionStore'
 import { useSettingStore } from '@/platform/settings/settingStore'
 import { getMediaTypeFromFilename } from '@/utils/formatUtil'
@@ -36,6 +37,8 @@ interface ResultItemInit extends ResultItem {
   mediaType: string
   format?: string
   frame_rate?: number
+  display_name?: string
+  content?: string
 }
 
 export class ResultItemImpl {
@@ -47,9 +50,14 @@ export class ResultItemImpl {
   // 'audio' | 'images' | ...
   mediaType: string
 
+  display_name?: string
+
   // VHS output specific fields
   format?: string
   frame_rate?: number
+
+  // text specific field
+  content?: string
 
   constructor(obj: ResultItemInit) {
     this.filename = obj.filename ?? ''
@@ -59,8 +67,11 @@ export class ResultItemImpl {
     this.nodeId = obj.nodeId
     this.mediaType = obj.mediaType
 
+    this.display_name = obj.display_name
+
     this.format = obj.format
     this.frame_rate = obj.frame_rate
+    this.content = obj.content
   }
 
   get urlParams(): URLSearchParams {
@@ -88,7 +99,15 @@ export class ResultItemImpl {
   }
 
   get url(): string {
+    if (!this.filename) return ''
     return api.apiURL('/view?' + this.urlParams)
+  }
+
+  get previewUrl(): string {
+    if (!this.isImage) return this.url
+    const params = new URLSearchParams(this.urlParams)
+    appendCloudResParam(params, this.filename)
+    return api.apiURL('/view?' + params)
   }
 
   get urlWithTimestamp(): string {
@@ -105,6 +124,9 @@ export class ResultItemImpl {
     }
     if (this.isMp4) {
       return 'video/mp4'
+    }
+    if (this.filename.endsWith('.mov')) {
+      return 'video/quicktime'
     }
 
     if (this.isVhsFormat) {
@@ -134,14 +156,6 @@ export class ResultItemImpl {
     return undefined
   }
 
-  get isGif(): boolean {
-    return this.filename.endsWith('.gif')
-  }
-
-  get isWebp(): boolean {
-    return this.filename.endsWith('.webp')
-  }
-
   get isWebm(): boolean {
     return this.filename.endsWith('.webm')
   }
@@ -151,11 +165,11 @@ export class ResultItemImpl {
   }
 
   get isVideoBySuffix(): boolean {
-    return this.isWebm || this.isMp4
+    return getMediaTypeFromFilename(this.filename) === 'video'
   }
 
   get isImageBySuffix(): boolean {
-    return this.isGif || this.isWebp
+    return getMediaTypeFromFilename(this.filename) === 'image'
   }
 
   get isMp3(): boolean {
@@ -175,7 +189,7 @@ export class ResultItemImpl {
   }
 
   get isAudioBySuffix(): boolean {
-    return this.isMp3 || this.isWav || this.isOgg || this.isFlac
+    return getMediaTypeFromFilename(this.filename) === 'audio'
   }
 
   get isVideo(): boolean {
@@ -208,9 +222,14 @@ export class ResultItemImpl {
   get is3D(): boolean {
     return getMediaTypeFromFilename(this.filename) === '3D'
   }
+  get isText(): boolean {
+    return this.mediaType === 'text'
+  }
 
   get supportsPreview(): boolean {
-    return this.isImage || this.isVideo || this.isAudio || this.is3D
+    return (
+      this.isImage || this.isVideo || this.isAudio || this.is3D || this.isText
+    )
   }
 
   static filterPreviewable(
@@ -248,10 +267,7 @@ export class TaskItemImpl {
             }
           }
         : {})
-    // Remove animated outputs from the outputs object
-    this.outputs = _.mapValues(effectiveOutputs, (nodeOutputs) =>
-      _.omit(nodeOutputs, 'animated')
-    )
+    this.outputs = effectiveOutputs
     this.flatOutputs = flatOutputs ?? this.calculateFlatOutputs()
   }
 
@@ -259,30 +275,20 @@ export class TaskItemImpl {
     if (!this.outputs) {
       return []
     }
-    return Object.entries(this.outputs).flatMap(([nodeId, nodeOutputs]) =>
-      Object.entries(nodeOutputs).flatMap(([mediaType, items]) =>
-        (items as ResultItem[]).map(
-          (item: ResultItem) =>
-            new ResultItemImpl({
-              ...item,
-              nodeId,
-              mediaType
-            })
-        )
-      )
-    )
+    return parseTaskOutput(this.outputs)
   }
 
-  /** All outputs that support preview (images, videos, audio, 3D) */
+  /** All outputs that support preview (images, videos, audio, 3D, text) */
   get previewableOutputs(): readonly ResultItemImpl[] {
     return ResultItemImpl.filterPreviewable(this.flatOutputs)
   }
 
   get previewOutput(): ResultItemImpl | undefined {
     const previewable = this.previewableOutputs
-    // Prefer saved media files over the temp previews
+    // Prefer the last saved media file (most recent result) over temp previews
     return (
-      previewable.find((output) => output.type === 'output') ?? previewable[0]
+      previewable.findLast((output) => output.type === 'output') ??
+      previewable.at(-1)
     )
   }
 
@@ -310,10 +316,6 @@ export class TaskItemImpl {
 
   get key() {
     return this.jobId + this.displayStatus
-  }
-
-  get queueIndex() {
-    return this.job.priority
   }
 
   get jobId() {
@@ -479,11 +481,17 @@ export const useQueueStore = defineStore('queue', () => {
   const runningTasks = shallowRef<TaskItemImpl[]>([])
   const pendingTasks = shallowRef<TaskItemImpl[]>([])
   const historyTasks = shallowRef<TaskItemImpl[]>([])
+  const hasFetchedHistorySnapshot = ref(false)
   const maxHistoryItems = ref(64)
   const isLoading = ref(false)
 
-  // Scoped per-store instance; incremented to dedupe concurrent update() calls
-  let updateRequestId = 0
+  // Single-flight coalescing: at most one fetch in flight at a time.
+  // If update() is called while a fetch is running, the call is coalesced
+  // and a single re-fetch fires after the current one completes.
+  // This prevents both request spam and UI starvation (where a rapid stream
+  // of calls causes every response to be discarded by a stale-request guard).
+  let inFlight = false
+  let dirty = false
 
   const tasks = computed<TaskItemImpl[]>(
     () =>
@@ -498,8 +506,8 @@ export const useQueueStore = defineStore('queue', () => {
     tasks.value.flatMap((task: TaskItemImpl) => task.flatten())
   )
 
-  const lastHistoryQueueIndex = computed<number>(() =>
-    historyTasks.value.length ? historyTasks.value[0].queueIndex : -1
+  const lastJobHistoryPriority = computed<number>(() =>
+    historyTasks.value.length ? historyTasks.value[0].job.priority : -1
   )
 
   const hasPendingTasks = computed<boolean>(() => pendingTasks.value.length > 0)
@@ -508,15 +516,19 @@ export const useQueueStore = defineStore('queue', () => {
   )
 
   const update = async () => {
-    const requestId = ++updateRequestId
+    if (inFlight) {
+      dirty = true
+      return
+    }
+
+    inFlight = true
+    dirty = false
     isLoading.value = true
     try {
       const [queue, history] = await Promise.all([
         api.getQueue(),
         api.getHistory(maxHistoryItems.value)
       ])
-
-      if (requestId !== updateRequestId) return
 
       // API returns pre-sorted data (sort_by=create_time&order=desc)
       runningTasks.value = queue.Running.map((job) => new TaskItemImpl(job))
@@ -557,7 +569,7 @@ export const useQueueStore = defineStore('queue', () => {
         currentHistory.map((impl) => [impl.jobId, impl])
       )
 
-      historyTasks.value = sortedHistory.map((job) => {
+      const nextHistoryTasks = sortedHistory.map((job) => {
         const existing = existingByJobId.get(job.id)
         if (!existing) return new TaskItemImpl(job)
         // Recreate if outputs_count changed to ensure lazy loading works
@@ -566,12 +578,20 @@ export const useQueueStore = defineStore('queue', () => {
         }
         return existing
       })
+
+      const isHistoryUnchanged =
+        nextHistoryTasks.length === currentHistory.length &&
+        nextHistoryTasks.every((task, index) => task === currentHistory[index])
+
+      if (!isHistoryUnchanged) {
+        historyTasks.value = nextHistoryTasks
+      }
+      hasFetchedHistorySnapshot.value = true
     } finally {
-      // Only clear loading if this is the latest request.
-      // A stale request completing (success or error) should not touch loading state
-      // since a newer request is responsible for it.
-      if (requestId === updateRequestId) {
-        isLoading.value = false
+      isLoading.value = false
+      inFlight = false
+      if (dirty) {
+        void update()
       }
     }
   }
@@ -595,12 +615,13 @@ export const useQueueStore = defineStore('queue', () => {
     runningTasks,
     pendingTasks,
     historyTasks,
+    hasFetchedHistorySnapshot,
     maxHistoryItems,
     isLoading,
 
     tasks,
     flatTasks,
-    lastHistoryQueueIndex,
+    lastJobHistoryPriority,
     hasPendingTasks,
     activeJobsCount,
 

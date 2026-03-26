@@ -1,5 +1,6 @@
 import { t } from '@/i18n'
 import { drawTextInArea } from '@/lib/litegraph/src/draw'
+import { cachedMeasureText } from '@/lib/litegraph/src/utils/textMeasureCache'
 import { Rectangle } from '@/lib/litegraph/src/infrastructure/Rectangle'
 import type { Point } from '@/lib/litegraph/src/interfaces'
 import type { NodeId } from '@/lib/litegraph/src/LGraphNode'
@@ -16,6 +17,7 @@ import type {
   NodeBindable,
   TWidgetType
 } from '@/lib/litegraph/src/types/widgets'
+import { usePromotionStore } from '@/stores/promotionStore'
 import type { WidgetState } from '@/stores/widgetValueStore'
 import { useWidgetValueStore } from '@/stores/widgetValueStore'
 
@@ -24,6 +26,10 @@ export interface DrawWidgetOptions {
   width: number
   /** Synonym for "low quality". */
   showText?: boolean
+  /** When true, suppresses the promoted outline color (e.g. for projected copies on SubgraphNode). */
+  suppressPromotedOutline?: boolean
+  /** Transient image source for preview widgets rendered on behalf of another node (e.g. subgraph promotion). */
+  previewImages?: HTMLImageElement[]
 }
 
 interface DrawTruncatingTextOptions extends DrawWidgetOptions {
@@ -100,12 +106,6 @@ export abstract class BaseWidget<TWidget extends IBaseWidget = IBaseWidget>
     this._state.disabled = value ?? false
   }
 
-  get promoted(): boolean | undefined {
-    return this._state.promoted
-  }
-  set promoted(value: boolean | undefined) {
-    this._state.promoted = value ?? false
-  }
   element?: HTMLElement
   callback?(
     value: TWidget['value'],
@@ -138,8 +138,15 @@ export abstract class BaseWidget<TWidget extends IBaseWidget = IBaseWidget>
    * Once set, value reads/writes will be delegated to the store.
    */
   setNodeId(nodeId: NodeId): void {
-    this._state = useWidgetValueStore().registerWidget({
+    const graphId = this.node.graph?.rootGraph.id
+    if (!graphId) return
+
+    this._state = useWidgetValueStore().registerWidget(graphId, {
       ...this._state,
+      // BaseWidget: this.value getter returns this._state.value. So value: this.value === value: this._state.value.
+      // BaseDOMWidgetImpl: this.value getter returns options.getValue?.() ?? ''. Resolves the correct initial value instead of undefined.
+      // I.e., calls overriden getter -> options.getValue() -> correct value (https://github.com/Comfy-Org/ComfyUI_frontend/issues/9194).
+      value: this.value,
       nodeId
     })
   }
@@ -181,7 +188,6 @@ export abstract class BaseWidget<TWidget extends IBaseWidget = IBaseWidget>
       labelBaseline,
       label,
       disabled,
-      promoted,
       value,
       linkedWidgets,
       ...safeValues
@@ -195,17 +201,29 @@ export abstract class BaseWidget<TWidget extends IBaseWidget = IBaseWidget>
       value,
       label,
       disabled: disabled ?? false,
-      promoted: promoted ?? false,
       serialize: this.serialize,
       options: this.options
     }
   }
 
-  get outline_color() {
-    if (this.promoted) return LiteGraph.WIDGET_PROMOTED_OUTLINE_COLOR
+  getOutlineColor(suppressPromotedOutline = false) {
+    const graphId = this.node.graph?.rootGraph.id
+    if (
+      graphId &&
+      !suppressPromotedOutline &&
+      usePromotionStore().isPromotedByAny(graphId, {
+        sourceNodeId: String(this.node.id),
+        sourceWidgetName: this.name
+      })
+    )
+      return LiteGraph.WIDGET_PROMOTED_OUTLINE_COLOR
     return this.advanced
       ? LiteGraph.WIDGET_ADVANCED_OUTLINE_COLOR
       : LiteGraph.WIDGET_OUTLINE_COLOR
+  }
+
+  get outline_color() {
+    return this.getOutlineColor()
   }
 
   get background_color() {
@@ -262,13 +280,13 @@ export abstract class BaseWidget<TWidget extends IBaseWidget = IBaseWidget>
    */
   protected drawWidgetShape(
     ctx: CanvasRenderingContext2D,
-    { width, showText }: DrawWidgetOptions
+    { width, showText, suppressPromotedOutline }: DrawWidgetOptions
   ): void {
     const { height, y } = this
     const { margin } = BaseWidget
 
     ctx.textAlign = 'left'
-    ctx.strokeStyle = this.outline_color
+    ctx.strokeStyle = this.getOutlineColor(suppressPromotedOutline)
     ctx.fillStyle = this.background_color
     ctx.beginPath()
 
@@ -289,7 +307,7 @@ export abstract class BaseWidget<TWidget extends IBaseWidget = IBaseWidget>
    */
   protected drawVueOnlyWarning(
     ctx: CanvasRenderingContext2D,
-    { width }: DrawWidgetOptions,
+    { width, suppressPromotedOutline }: DrawWidgetOptions,
     label: string
   ): void {
     const { y, height } = this
@@ -299,7 +317,7 @@ export abstract class BaseWidget<TWidget extends IBaseWidget = IBaseWidget>
     ctx.fillStyle = this.background_color
     ctx.fillRect(15, y, width - 30, height)
 
-    ctx.strokeStyle = this.outline_color
+    ctx.strokeStyle = this.getOutlineColor(suppressPromotedOutline)
     ctx.strokeRect(15, y, width - 30, height)
 
     ctx.fillStyle = this.text_color
@@ -331,8 +349,8 @@ export abstract class BaseWidget<TWidget extends IBaseWidget = IBaseWidget>
 
     // Measure label and value
     const { displayName, _displayValue } = this
-    const labelWidth = ctx.measureText(displayName).width
-    const valueWidth = ctx.measureText(_displayValue).width
+    const labelWidth = cachedMeasureText(ctx, displayName)
+    const valueWidth = cachedMeasureText(ctx, _displayValue)
 
     const gap = BaseWidget.labelValueGap
     const x = margin * 2 + leftPadding

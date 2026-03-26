@@ -1,3 +1,11 @@
+import { resolveBlueprintEssentialsCategory } from '@/constants/essentialsDisplayNames'
+import type { EssentialsCategory } from '@/constants/essentialsNodes'
+import {
+  ESSENTIALS_CATEGORY_CANONICAL,
+  ESSENTIALS_CATEGORY_RANK,
+  ESSENTIALS_NODE_RANK
+} from '@/constants/essentialsNodes'
+import { t } from '@/i18n'
 import type { ComfyNodeDefImpl } from '@/stores/nodeDefStore'
 import { buildNodeDefTree } from '@/stores/nodeDefStore'
 import type {
@@ -9,10 +17,50 @@ import type {
 } from '@/types/nodeOrganizationTypes'
 import { NodeSourceType } from '@/types/nodeSource'
 import type { TreeNode } from '@/types/treeExplorerTypes'
-import { sortedTree } from '@/utils/treeUtil'
-import { upperCase } from 'es-toolkit/string'
+import { sortedTree, unwrapTreeRoot } from '@/utils/treeUtil'
 
 const DEFAULT_ICON = 'pi pi-sort'
+const UNKNOWN_RANK = Number.MAX_SAFE_INTEGER
+
+function resolveEssentialsCategory(
+  nodeDef: ComfyNodeDefImpl
+): EssentialsCategory | undefined {
+  if (!nodeDef.isCoreNode) return undefined
+
+  if (nodeDef.essentials_category) {
+    return (
+      ESSENTIALS_CATEGORY_CANONICAL.get(
+        nodeDef.essentials_category.toLowerCase()
+      ) ?? (nodeDef.essentials_category as EssentialsCategory)
+    )
+  }
+  return resolveBlueprintEssentialsCategory(nodeDef.name)
+}
+
+function sortByKnownOrder<T>(
+  items: T[],
+  getKey: (item: T) => string | undefined,
+  rankMap: ReadonlyMap<string, number>
+): void {
+  items.sort(
+    (a, b) =>
+      (rankMap.get(getKey(a) ?? '') ?? UNKNOWN_RANK) -
+      (rankMap.get(getKey(b) ?? '') ?? UNKNOWN_RANK)
+  )
+}
+
+function categoryPathExtractor(nodeDef: ComfyNodeDefImpl): string[] {
+  const category = nodeDef.category || ''
+  const categoryParts = category ? category.split('/') : []
+  return [...categoryParts, nodeDef.name]
+}
+
+function isBlueprint(node: ComfyNodeDefImpl): boolean {
+  return (
+    node.nodeSource.type === NodeSourceType.Blueprint ||
+    !!node.python_module?.startsWith('blueprint')
+  )
+}
 
 export const DEFAULT_GROUPING_ID = 'category' as const
 export const DEFAULT_SORTING_ID = 'original' as const
@@ -25,11 +73,7 @@ class NodeOrganizationService {
       label: 'sideToolbar.nodeLibraryTab.groupStrategies.category',
       icon: 'pi pi-folder',
       description: 'sideToolbar.nodeLibraryTab.groupStrategies.categoryDesc',
-      getNodePath: (nodeDef: ComfyNodeDefImpl) => {
-        const category = nodeDef.category || ''
-        const categoryParts = category ? category.split('/') : []
-        return [...categoryParts, nodeDef.name]
-      }
+      getNodePath: categoryPathExtractor
     },
     {
       id: 'module',
@@ -120,92 +164,205 @@ class NodeOrganizationService {
     nodes: ComfyNodeDefImpl[],
     tabId: TabId = DEFAULT_TAB_ID
   ): NodeSection[] {
-    const categoryPathExtractor = (nodeDef: ComfyNodeDefImpl) => {
-      const category = nodeDef.category || ''
-      const categoryParts = category ? category.split('/') : []
-      return [...categoryParts, nodeDef.name]
-    }
-
     switch (tabId) {
-      case 'essentials': {
-        const essentialNodes = nodes.filter(
-          (nodeDef) => nodeDef.essentials_category !== undefined
-        )
-        const essentialsPathExtractor = (nodeDef: ComfyNodeDefImpl) => {
-          const folder = nodeDef.essentials_category || ''
-          return folder ? [folder, nodeDef.name] : [nodeDef.name]
-        }
-        const tree = buildNodeDefTree(essentialNodes, {
-          pathExtractor: essentialsPathExtractor
-        })
-        const folderOrder = [
-          'basics',
-          'text generation',
-          'image generation',
-          'video generation',
-          'image tools',
-          'video tools',
-          'audio',
-          '3D'
-        ]
-        if (tree.children) {
-          const len = folderOrder.length
-          const originalIndex = new Map(
-            tree.children.map((child, i) => [child, i])
-          )
-          tree.children.sort((a, b) => {
-            const ai = folderOrder.indexOf(a.label ?? '')
-            const bi = folderOrder.indexOf(b.label ?? '')
-            const orderA = ai === -1 ? len + originalIndex.get(a)! : ai
-            const orderB = bi === -1 ? len + originalIndex.get(b)! : bi
-            return orderA - orderB
-          })
-        }
-        return [{ tree }]
-      }
-      case 'custom': {
-        const customNodes = nodes.filter(
-          (nodeDef) => nodeDef.nodeSource.type === NodeSourceType.CustomNodes
-        )
-        const groupedByMainCategory = new Map<string, ComfyNodeDefImpl[]>()
-        for (const node of customNodes) {
-          const mainCategory = node.main_category ?? 'custom_extensions'
-          if (!groupedByMainCategory.has(mainCategory)) {
-            groupedByMainCategory.set(mainCategory, [])
-          }
-          groupedByMainCategory.get(mainCategory)!.push(node)
-        }
-
-        return Array.from(groupedByMainCategory.entries()).map(
-          ([mainCategory, categoryNodes]) => ({
-            title: upperCase(mainCategory),
-            tree: buildNodeDefTree(categoryNodes, {
-              pathExtractor: categoryPathExtractor
-            })
-          })
-        )
-      }
+      case 'essentials':
+        return this.organizeEssentials(nodes)
+      case 'blueprints':
+        return this.organizeBlueprints(nodes)
       case 'all':
-      default: {
-        const groupedByMainCategory = new Map<string, ComfyNodeDefImpl[]>()
-        for (const node of nodes) {
-          const mainCategory = node.main_category ?? 'basics'
-          if (!groupedByMainCategory.has(mainCategory)) {
-            groupedByMainCategory.set(mainCategory, [])
-          }
-          groupedByMainCategory.get(mainCategory)!.push(node)
-        }
+      default:
+        return this.organizeAll(nodes)
+    }
+  }
 
-        return Array.from(groupedByMainCategory.entries()).map(
-          ([mainCategory, categoryNodes]) => ({
-            title: upperCase(mainCategory),
-            tree: buildNodeDefTree(categoryNodes, {
-              pathExtractor: categoryPathExtractor
-            })
+  private organizeEssentials(nodes: ComfyNodeDefImpl[]): NodeSection[] {
+    const categoryByNode = new Map<ComfyNodeDefImpl, EssentialsCategory>()
+    const essentialNodes = nodes.filter((node) => {
+      const category = resolveEssentialsCategory(node)
+      if (!category) return false
+      categoryByNode.set(node, category)
+      return true
+    })
+
+    const tree = buildNodeDefTree(essentialNodes, {
+      pathExtractor: (node) => [categoryByNode.get(node)!, node.name]
+    })
+    this.sortEssentialsTree(tree)
+    return [{ tree }]
+  }
+
+  private sortEssentialsTree(tree: TreeNode): void {
+    if (!tree.children) return
+
+    sortByKnownOrder(
+      tree.children,
+      (node) => node.label,
+      ESSENTIALS_CATEGORY_RANK
+    )
+
+    for (const folder of tree.children) {
+      if (!folder.children) continue
+      const rankMap = ESSENTIALS_NODE_RANK[folder.label as EssentialsCategory]
+      if (!rankMap) continue
+      sortByKnownOrder(
+        folder.children,
+        (node) => node.data?.name ?? node.label,
+        rankMap
+      )
+    }
+  }
+
+  private organizeBlueprints(nodes: ComfyNodeDefImpl[]): NodeSection[] {
+    const { myBlueprints, comfyBlueprints } = this.partitionBlueprints(nodes)
+    return [
+      {
+        title: 'sideToolbar.nodeLibraryTab.sections.myBlueprints',
+        tree: unwrapTreeRoot(
+          buildNodeDefTree(myBlueprints, {
+            pathExtractor: categoryPathExtractor
           })
         )
+      },
+      {
+        title: 'sideToolbar.nodeLibraryTab.sections.comfyBlueprints',
+        tree: unwrapTreeRoot(
+          buildNodeDefTree(comfyBlueprints, {
+            pathExtractor: categoryPathExtractor
+          })
+        )
+      }
+    ]
+  }
+
+  private organizeAll(nodes: ComfyNodeDefImpl[]): NodeSection[] {
+    const {
+      myBlueprints,
+      comfyBlueprints,
+      partnerNodes,
+      comfyNodes,
+      extensions
+    } = this.classifyNodes(nodes)
+
+    const blueprintTree = this.buildBlueprintTree(
+      myBlueprints,
+      comfyBlueprints,
+      categoryPathExtractor
+    )
+
+    const sections: NodeSection[] = []
+
+    if (blueprintTree.children?.length) {
+      sections.push({ category: 'blueprints', tree: blueprintTree })
+    }
+    if (partnerNodes.length > 0) {
+      sections.push({
+        category: 'partnerNodes',
+        tree: unwrapTreeRoot(
+          buildNodeDefTree(partnerNodes, {
+            pathExtractor: categoryPathExtractor
+          })
+        )
+      })
+    }
+    if (comfyNodes.length > 0) {
+      sections.push({
+        category: 'comfyNodes',
+        tree: buildNodeDefTree(comfyNodes, {
+          pathExtractor: categoryPathExtractor
+        })
+      })
+    }
+    if (extensions.length > 0) {
+      sections.push({
+        category: 'extensions',
+        tree: buildNodeDefTree(extensions, {
+          pathExtractor: categoryPathExtractor
+        })
+      })
+    }
+
+    return sections
+  }
+
+  private partitionBlueprints(nodes: ComfyNodeDefImpl[]): {
+    myBlueprints: ComfyNodeDefImpl[]
+    comfyBlueprints: ComfyNodeDefImpl[]
+  } {
+    const myBlueprints: ComfyNodeDefImpl[] = []
+    const comfyBlueprints: ComfyNodeDefImpl[] = []
+    for (const node of nodes) {
+      if (!isBlueprint(node)) continue
+      if (node.isGlobal) comfyBlueprints.push(node)
+      else myBlueprints.push(node)
+    }
+    return { myBlueprints, comfyBlueprints }
+  }
+
+  private classifyNodes(nodes: ComfyNodeDefImpl[]): {
+    myBlueprints: ComfyNodeDefImpl[]
+    comfyBlueprints: ComfyNodeDefImpl[]
+    partnerNodes: ComfyNodeDefImpl[]
+    comfyNodes: ComfyNodeDefImpl[]
+    extensions: ComfyNodeDefImpl[]
+  } {
+    const myBlueprints: ComfyNodeDefImpl[] = []
+    const comfyBlueprints: ComfyNodeDefImpl[] = []
+    const partnerNodes: ComfyNodeDefImpl[] = []
+    const comfyNodes: ComfyNodeDefImpl[] = []
+    const extensions: ComfyNodeDefImpl[] = []
+
+    for (const node of nodes) {
+      if (isBlueprint(node)) {
+        if (node.isGlobal) comfyBlueprints.push(node)
+        else myBlueprints.push(node)
+      } else if (node.api_node || node.category?.startsWith('api node')) {
+        partnerNodes.push(node)
+      } else if (
+        node.nodeSource.type === NodeSourceType.Core ||
+        node.nodeSource.type === NodeSourceType.Essentials
+      ) {
+        comfyNodes.push(node)
+      } else {
+        extensions.push(node)
       }
     }
+
+    return {
+      myBlueprints,
+      comfyBlueprints,
+      partnerNodes,
+      comfyNodes,
+      extensions
+    }
+  }
+
+  private buildBlueprintTree(
+    myBlueprints: ComfyNodeDefImpl[],
+    comfyBlueprints: ComfyNodeDefImpl[],
+    pathExtractor: (nodeDef: ComfyNodeDefImpl) => string[]
+  ): TreeNode {
+    const children: TreeNode[] = []
+    if (myBlueprints.length > 0) {
+      const tree = unwrapTreeRoot(
+        buildNodeDefTree(myBlueprints, { pathExtractor })
+      )
+      children.push({
+        key: 'root/my-blueprints',
+        label: t('sideToolbar.nodeLibraryTab.sections.myBlueprints'),
+        children: tree.children
+      })
+    }
+    if (comfyBlueprints.length > 0) {
+      const tree = unwrapTreeRoot(
+        buildNodeDefTree(comfyBlueprints, { pathExtractor })
+      )
+      children.push({
+        key: 'root/comfy-blueprints',
+        label: t('sideToolbar.nodeLibraryTab.sections.comfyBlueprints'),
+        children: tree.children
+      })
+    }
+    return { key: 'root', label: '', children }
   }
 
   organizeNodes(

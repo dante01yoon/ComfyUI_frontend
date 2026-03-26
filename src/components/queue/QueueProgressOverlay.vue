@@ -4,7 +4,7 @@
     :class="['flex', 'justify-end', 'w-full', 'pointer-events-none']"
   >
     <div
-      class="pointer-events-auto flex w-[350px] min-w-[310px] max-h-[60vh] flex-col overflow-hidden rounded-lg border font-inter transition-colors duration-200 ease-in-out"
+      class="pointer-events-auto flex max-h-[60vh] w-[350px] min-w-[310px] flex-col overflow-hidden rounded-lg border font-inter transition-colors duration-200 ease-in-out"
       :class="containerClass"
       @mouseenter="isHovered = true"
       @mouseleave="isHovered = false"
@@ -15,14 +15,12 @@
         v-model:selected-job-tab="selectedJobTab"
         v-model:selected-workflow-filter="selectedWorkflowFilter"
         v-model:selected-sort-mode="selectedSortMode"
-        class="flex-1 min-h-0"
+        class="min-h-0 flex-1"
         :header-title="headerTitle"
-        :show-concurrent-indicator="showConcurrentIndicator"
-        :concurrent-workflow-count="concurrentWorkflowCount"
         :queued-count="queuedCount"
         :displayed-job-groups="displayedJobGroups"
         :has-failed-jobs="hasFailedJobs"
-        @show-assets="openAssetsSidebar"
+        @show-assets="toggleAssetsSidebar"
         @clear-history="onClearHistoryFromMenu"
         @clear-queued="cancelQueuedWorkflows"
         @cancel-item="onCancelItem"
@@ -47,7 +45,7 @@
     </div>
   </div>
 
-  <ResultGallery
+  <MediaLightbox
     v-model:active-index="galleryActiveIndex"
     :all-gallery-items="galleryItems"
   />
@@ -59,10 +57,10 @@ import { useI18n } from 'vue-i18n'
 
 import QueueOverlayActive from '@/components/queue/QueueOverlayActive.vue'
 import QueueOverlayExpanded from '@/components/queue/QueueOverlayExpanded.vue'
-import QueueClearHistoryDialog from '@/components/queue/dialogs/QueueClearHistoryDialog.vue'
-import ResultGallery from '@/components/sidebar/tabs/queue/ResultGallery.vue'
+import MediaLightbox from '@/components/sidebar/tabs/queue/MediaLightbox.vue'
 import { useJobList } from '@/composables/queue/useJobList'
 import type { JobListItem } from '@/composables/queue/useJobList'
+import { useQueueClearHistoryDialog } from '@/composables/queue/useQueueClearHistoryDialog'
 import { useQueueProgress } from '@/composables/queue/useQueueProgress'
 import { useResultGallery } from '@/composables/queue/useResultGallery'
 import { useErrorHandling } from '@/composables/useErrorHandling'
@@ -71,22 +69,16 @@ import { isCloud } from '@/platform/distribution/types'
 import { api } from '@/scripts/api'
 import { useAssetsStore } from '@/stores/assetsStore'
 import { useCommandStore } from '@/stores/commandStore'
-import { useDialogStore } from '@/stores/dialogStore'
 import { useExecutionStore } from '@/stores/executionStore'
 import { useQueueStore } from '@/stores/queueStore'
 import { useSidebarTabStore } from '@/stores/workspace/sidebarTabStore'
 
 type OverlayState = 'hidden' | 'active' | 'expanded'
 
-const props = withDefaults(
-  defineProps<{
-    expanded?: boolean
-    menuHovered?: boolean
-  }>(),
-  {
-    menuHovered: false
-  }
-)
+const { expanded, menuHovered } = defineProps<{
+  expanded?: boolean
+  menuHovered?: boolean
+}>()
 
 const emit = defineEmits<{
   (e: 'update:expanded', value: boolean): void
@@ -97,9 +89,9 @@ const queueStore = useQueueStore()
 const commandStore = useCommandStore()
 const executionStore = useExecutionStore()
 const sidebarTabStore = useSidebarTabStore()
-const dialogStore = useDialogStore()
 const assetsStore = useAssetsStore()
 const assetSelectionStore = useAssetSelectionStore()
+const { showQueueClearHistoryDialog } = useQueueClearHistoryDialog()
 const { wrapWithErrorHandlingAsync } = useErrorHandling()
 
 const {
@@ -109,13 +101,12 @@ const {
   currentNodeProgressStyle
 } = useQueueProgress()
 const isHovered = ref(false)
-const isOverlayHovered = computed(() => isHovered.value || props.menuHovered)
+const isOverlayHovered = computed(() => isHovered.value || menuHovered)
 const internalExpanded = ref(false)
 const isExpanded = computed({
-  get: () =>
-    props.expanded === undefined ? internalExpanded.value : props.expanded,
+  get: () => (expanded === undefined ? internalExpanded.value : expanded),
   set: (value) => {
-    if (props.expanded === undefined) {
+    if (expanded === undefined) {
       internalExpanded.value = value
     }
     emit('update:expanded', value)
@@ -184,13 +175,6 @@ const headerTitle = computed(() => {
   })
 })
 
-const concurrentWorkflowCount = computed(
-  () => executionStore.runningWorkflowCount
-)
-const showConcurrentIndicator = computed(
-  () => concurrentWorkflowCount.value > 1
-)
-
 const {
   selectedJobTab,
   selectedWorkflowFilter,
@@ -241,6 +225,10 @@ const setExpanded = (expanded: boolean) => {
 
 const viewAllJobs = () => {
   setExpanded(true)
+}
+
+const toggleAssetsSidebar = () => {
+  sidebarTabStore.toggleSidebarTab('assets')
 }
 
 const openAssetsSidebar = () => {
@@ -309,28 +297,7 @@ const interruptAll = wrapWithErrorHandlingAsync(async () => {
   await queueStore.update()
 })
 
-const showClearHistoryDialog = () => {
-  dialogStore.showDialog({
-    key: 'queue-clear-history',
-    component: QueueClearHistoryDialog,
-    dialogComponentProps: {
-      headless: true,
-      closable: false,
-      closeOnEscape: true,
-      dismissableMask: true,
-      pt: {
-        root: {
-          class: 'max-w-[360px] w-auto bg-transparent border-none shadow-none'
-        },
-        content: {
-          class: '!p-0 bg-transparent'
-        }
-      }
-    }
-  })
-}
-
 const onClearHistoryFromMenu = () => {
-  showClearHistoryDialog()
+  showQueueClearHistoryDialog()
 }
 </script>
